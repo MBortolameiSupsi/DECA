@@ -140,4 +140,6 @@ class TestData(Dataset):
                 'imagename': imagename,
                 'tform': torch.tensor(tform.params).float(),
                 'original_image': torch.tensor(image.transpose(2,0,1)).float(),
+                'bbox': bbox,
+                'bbox2point': self.bbox2point
                 }
