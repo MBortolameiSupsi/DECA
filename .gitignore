@@ -31,9 +31,9 @@ Thumbs.db
 ############
 *.mat
 *.pkl
-*.obj
+
 *.dat
-*.npz
+
 
 # python file #
 ############
