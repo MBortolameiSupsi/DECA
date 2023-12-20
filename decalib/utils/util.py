@@ -638,6 +638,7 @@ def tensor_vis_landmarks(images, landmarks, gt_landmarks=None, color = 'g', isSc
     for i in range(images.shape[0]):
         image = images[i]
         image = image.transpose(1,2,0)[:,:,[2,1,0]].copy(); image = (image*255)
+        print("tensor vis - landmarks shape",landmarks.shape,"image shape here",image.shape, "image.shape[0]",image.shape[0],"[1]",image.shape[1])
         if isScale:
             predicted_landmark = predicted_landmarks[i]
             predicted_landmark[...,0] = predicted_landmark[...,0]*image.shape[1]/2 + image.shape[1]/2
@@ -656,7 +657,37 @@ def tensor_vis_landmarks(images, landmarks, gt_landmarks=None, color = 'g', isSc
 
     vis_landmarks = np.stack(vis_landmarks)
     vis_landmarks = torch.from_numpy(vis_landmarks[:,:,:,[2,1,0]].transpose(0,3,1,2))/255.#, dtype=torch.float32)
+    #print("\n vis_landmarks predicted_landmark",predicted_landmark)
     return vis_landmarks
+
+def extract_full_res_landmarks(landmarks, image):
+    # Extract landmarks in full resolution
+
+    # input image[0] is torch.Size([3,1080,1920])
+    # extrapolate dimensions we need
+    image_shape = (image[0].shape[1],image[0].shape[2])
+    print("extract_full_res_landmarks image_shape",image_shape," [0]",image_shape[0],"[1]",image_shape[1])
+    print("extract_full_res_landmarks IN are",landmarks.shape,landmarks)
+
+    full_res_landmarks = []
+    predicted_landmarks = landmarks.detach().cpu().numpy()
+    #breakpoint()
+    for i in range(predicted_landmarks.shape[0]):
+        predicted_landmark = predicted_landmarks[i]
+        
+        # Scale landmarks to full image resolution if flag is True
+        
+        full_res_landmark = predicted_landmark.copy()
+        full_res_landmark[..., 0] = full_res_landmark[..., 0] * image_shape[1] / 2 + image_shape[1] / 2
+        full_res_landmark[..., 1] = full_res_landmark[..., 1] * image_shape[0] / 2 + image_shape[0] / 2
+       
+        
+        full_res_landmarks.append(full_res_landmark)
+    
+    # Convert the list of full resolution landmarks to a numpy array
+    full_res_landmarks = np.array(full_res_landmarks)
+    print('\n extract_full_res_landmarks landmarks are ',full_res_landmarks.shape, full_res_landmarks )
+    return full_res_landmarks
 
 
 ############### for training

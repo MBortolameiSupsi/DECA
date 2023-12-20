@@ -1,0 +1,52 @@
+﻿FULL RES SLOW  True deca original  False
+  0%|                                                                                 | 0/1 [00:00<?, ?it/s]Decoding
+torch
+slow return_vis and render_orig
+points_scale self.image_size 224
+rendering
+use detail
+vis_lmk
+return_vis
+tensor vis - landmarks shape torch.Size([1, 68, 2]) image shape here (1080, 1920, 3) image.shape[0] 1080 [1] 1920
+tensor vis - landmarks shape torch.Size([1, 68, 4]) image shape here (1080, 1920, 3) image.shape[0] 1080 [1] 1920
+extract_full_res_landmarks image_shape (1080, 1920)  [0] 1080 [1] 1920
+extract_full_res_landmarks IN are torch.Size([1, 68, 2]) tensor([[
+         [-0.1873, -0.0361],
+         [-0.1837,  0.0449],
+         [-0.1771,  0.1175],
+
+ extract_full_res_landmarks landmarks are  (1, 68, 2) [[
+  [ 780.23834  520.51904]
+  [ 783.6488   564.25745]
+  [ 789.9471   603.46924]
+
+Image 0: eye distance 0.09083130616256568 , scaling factor 33.02826004319192 - AFTER SCALING eye_distance2 3.0000001067548827
+
+BEFORE PNP - landmarks2Dfullres  [
+ [ 780.23865  520.5198 ]
+ [ 783.6494   564.258  ]
+ [ 789.94775  603.4697 ]
+
+ 
+ landmarks3D [
+ [-6.24137402e+00 -1.62808657e+00  4.66368961e+00]
+ [-6.16551208e+00  9.63482082e-01  6.25585794e+00]
+ [-5.99842548e+00  3.88017035e+00  7.54362345e+00]
+
+AFTER PNP - translation_vector  (3, 1) [
+ [-4.03372487e+00]
+ [-6.38473991e-02]
+ [ 8.20147710e+01]]
+
+100%|█████████████████████████████████████████████████████████████████████████| 1/1 [00:10<00:00, 10.96s/it]
+Image  0  - Encode time - 0.1959683895111084
+Image  0  - Decode time - 0.6534993648529053
+Image  0  - Landmark time - 0.004000663757324219
+Image  0  - Solvepnp time - 0.0
+Image  0  - Distance is - 82.11373196006693
+Total encoding time for all images - 0.1959683895111084
+Total decoding time for all images - 0.6534993648529053
+Average encoding time per image - 0.1959683895111084
+Average decoding time per image - 0.6534993648529053
+Total Landmark time for all images - 0.004000663757324219
+Total Solvepnp time for all images - 0.0
