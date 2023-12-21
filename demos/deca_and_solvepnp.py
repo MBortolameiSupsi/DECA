@@ -55,8 +55,7 @@ def main(args):
     testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector, sample_step=args.sample_step)
 
     # Load camera matrix
-    data = np.load(r'C:\Users\massimo.bortolamei\Documents\Python Camera Calibration\calibration_data_webcam_side.npz')
-    #data = np.load(r'C:\Users\massimo.bortolamei\Documents\Python Camera Calibration\calibration_data_iphone_back_2.npz')
+    data = np.load(r'Python Camera Calibration\calibration_data_webcam_side.npz')
     camera_matrix = data['camera_matrix']
     dist_coeffs = data['dist_coeffs']
     # Ensure that camera_matrix and dist_coeffs are also float32 and have the correct shapes
