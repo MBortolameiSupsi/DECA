@@ -27,6 +27,9 @@ import math
 import time
 import open3d as o3d
 
+import trimesh
+
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 #full_res_slow = True
 full_res_slow = False
@@ -200,6 +203,7 @@ def main(args):
             save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D, args)
         if args.saveDistances:
             save_distances(i, distance, args)
+        show_obj_with_landmarks3d(i, landmarks3D, args)
     
 # ---- outside loop, after all processing ended
     for i in range(len(testdata)):
@@ -313,6 +317,37 @@ def save_landmarks3d_ply(i, landmarks3D, args):
     save_path = f"{args.savefolder}/{i}_kpt3d.ply"
     # Write the point cloud to a PLY file with the header
     o3d.io.write_point_cloud(save_path, pcd)
+    
+
+def show_obj_with_landmarks3d(i, landmarks3D, args):
+    # Load the .obj file
+    original_mesh = trimesh.load('data/head_template.obj')
+   # Create a list to hold all meshes (original mesh + spheres)
+    all_meshes = [original_mesh]
+
+    # Sphere parameters (you can adjust the radius and subdivisions)
+    sphere_radius = 0.005
+    sphere_subdivisions = 2
+
+    # Create a sphere for each landmark and add it to the list of meshes
+    for landmark in landmarks3D:
+        sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions)
+        all_meshes.append(sphere)
+
+    # Combine all meshes into a single mesh
+    combined_mesh = trimesh.util.concatenate(all_meshes)
+
+    # Export the combined mesh to a new OBJ file
+    combined_mesh.export(f'{args.savefolder}/{i}modelWithLandmarks3D.obj')
+
+# Function to plot a sphere at each landmark point
+def create_sphere_at(center, radius, subdivisions=3):
+    # Create a sphere mesh
+    sphere = trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+    # Translate the sphere to the landmark position
+    sphere.apply_translation(center)
+    return sphere
+
 def save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D, args):
     np.savetxt(f'{args.savefolder}/{i}_landmarks2d.txt', landmarks2Dfullres)
     np.savetxt(f'{args.savefolder}/{i}_landmarks3d.txt', landmarks3D)  

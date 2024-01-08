@@ -319,10 +319,13 @@ class DECA(nn.Module):
             points_scale = [self.image_size, self.image_size]
             _, _, h, w = original_image.shape
             print("full_res_landmarks2D points_scale self.image_size",self.image_size,"h", h, "w",w)
+            # TODO: SERVE??? non si nota differenza
+            #trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
+            #
             landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
             opdict['landmarks2d_full_res'] = util.extract_full_res_landmarks(landmarks2d, images)
             background = None
-            # TODO: SERVE?????
+            # TODO: SERVE????? sballa tutti i landmarks.
             #landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
             
         ## rendering
