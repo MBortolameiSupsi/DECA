@@ -134,14 +134,14 @@ def main(args):
              
             # ---- LANDMARKS ----
             start_landmarks = time.time()
-            landmarks3D = opdict['landmarks3d'][0].cpu().numpy()[:, :3]
+            # landmarks3D = opdict['landmarks3d'][0].cpu().numpy()[:, :3]
+            landmarks3D = opdict['landmarks3d_world'][0].cpu().numpy()[:, :3]
             #landmarks2D = opdict['landmarks2d'][0].cpu().numpy()
             
-            eye_distance = math.dist(landmarks3D[39], landmarks3D[42])
-            scaling_factor = 3/eye_distance # 3 cm between real life corresponing points (eyes inner corners)
-            landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32) * scaling_factor
-            eye_distance2 = math.dist(landmarks3D[39], landmarks3D[42])
-            print(f'\nImage {i}: eye distance {eye_distance} , scaling factor {scaling_factor} - AFTER SCALING eye_distance2 {eye_distance2}')
+            print(f'\nImage {i}: - BEFORE SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
+            scalePoints(landmarks3D, 39, 42, 3)
+            landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
+            print(f'\nImage {i}: - AFTER SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
 
             if full_res_slow:
                 landmarks2Dfullres = orig_visdict['landmarks2d_full_res'][0]
@@ -166,7 +166,6 @@ def main(args):
             #print("opdict['landmarks3d'] ",opdict['landmarks3d'][0].cpu().numpy()[:, :3])
             # if full_res_slow:
             #     print("orig_visdict['landmarks3d'] ",orig_visdict['landmarks3d'][0].cpu().numpy()[:, :3])
-            #breakpoint()
             print("BEFORE PNP - landmarks2Dfullres ",landmarks2Dfullres,"landmarks3D",landmarks3D.shape, landmarks3D)
             
             # ---- SOLVEPNP ----
@@ -185,7 +184,9 @@ def main(args):
                 distances.append(distance)
             else:
                 print(f'FAILED')
-            
+            # breakpoint()
+            m = cv2.Rodrigues(rotation_vector)
+            print("Rotation is ", m[0])
             end_solvepnp = time.time()
             solvepnp_time = end_solvepnp - start_solvepnp
             total_solvepnp_time += solvepnp_time
@@ -203,6 +204,8 @@ def main(args):
             save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D, args)
         if args.saveDistances:
             save_distances(i, distance, args)
+        # show_obj_with_landmarks3d(i, landmarks3D_world, args)
+        # breakpoint()
         show_obj_with_landmarks3d(i, landmarks3D, args)
     
 # ---- outside loop, after all processing ended
@@ -267,6 +270,11 @@ def main(args):
 #                     cv2.imwrite(os.path.join(savefolder, name, 'orig_' + name + '_' + vis_name +'.jpg'), util.tensor2image(orig_visdict[vis_name][0]))
     # print(f'-- please check the results in {savefolder}')
 
+def scalePoints(points, fromPointIndex, toPointIndex, desiredSize):
+     eye_distance = math.dist(points[fromPointIndex], points[toPointIndex])
+     scaling_factor = desiredSize/eye_distance # 3 cm between real life corresponing points (eyes inner corners)
+     points *= scaling_factor
+
 def convert_normalized_to_pixels(normalized_points, image_width, image_height, imageData):
     pixel_points = []
     bbox = imageData['bbox']
@@ -321,24 +329,43 @@ def save_landmarks3d_ply(i, landmarks3D, args):
 
 def show_obj_with_landmarks3d(i, landmarks3D, args):
     # Load the .obj file
-    original_mesh = trimesh.load('data/head_template.obj')
-   # Create a list to hold all meshes (original mesh + spheres)
+    original_mesh = trimesh.load('data/head_template2.obj')
+    
+    print(f'\nObj resizing: - BEFORE SCALING eye_distance is {math.dist(original_mesh.vertices[3827], original_mesh.vertices[3619])}')
+    # Resize mesh to match 3cm distance between eye corners
+    # scalePoints(original_mesh.vertices, 3827, 3619, 3)
+    scalePoints(original_mesh.vertices, 3858, 3649, 3)
+    print(f'\nObj resizing: - AFTER SCALING eye_distance is {math.dist(original_mesh.vertices[3827], original_mesh.vertices[3619])}')
+    # Create a list to hold all meshes (original mesh + spheres)
+    original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
+
     all_meshes = [original_mesh]
+    empty_obj = trimesh.PointCloud(vertices=[])
+    spheres = [empty_obj]
+    # all_spheres = [empty_obj]
 
     # Sphere parameters (you can adjust the radius and subdivisions)
-    sphere_radius = 0.005
+    sphere_radius = 0.1
     sphere_subdivisions = 2
 
     # Create a sphere for each landmark and add it to the list of meshes
     for landmark in landmarks3D:
         sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions)
         all_meshes.append(sphere)
+        spheres.append(sphere)
+        all_spheres.append(sphere)
+    # for vertex in original_mesh.vertices:
+    #     sphere = create_sphere_at(center=vertex, radius=sphere_radius, subdivisions=sphere_subdivisions)
+    #     all_spheres.append(sphere)
 
     # Combine all meshes into a single mesh
     combined_mesh = trimesh.util.concatenate(all_meshes)
-
-    # Export the combined mesh to a new OBJ file
+    spheres_mesh = trimesh.util.concatenate(spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
+    # all_spheres_mesh = trimesh.util.concatenate(all_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
+    
     combined_mesh.export(f'{args.savefolder}/{i}modelWithLandmarks3D.obj')
+    spheres_mesh.export(f'{args.savefolder}/{i}spheresLandmarks3D.obj')
+    # all_spheres_mesh.export(f'{args.savefolder}/{i}all_spheres_modelWithLandmarks3D.obj')
 
 # Function to plot a sphere at each landmark point
 def create_sphere_at(center, radius, subdivisions=3):
