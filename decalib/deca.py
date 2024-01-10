@@ -176,7 +176,7 @@ class DECA(nn.Module):
         landmarks2d = util.batch_orth_proj(landmarks2d, codedict['cam'])[:,:,:2]; landmarks2d[:,:,1:] = -landmarks2d[:,:,1:]#; landmarks2d = landmarks2d*self.image_size/2 + self.image_size/2
         landmarks3d = util.batch_orth_proj(landmarks3d, codedict['cam']); landmarks3d[:,:,1:] = -landmarks3d[:,:,1:] #; landmarks3d = landmarks3d*self.image_size/2 + self.image_size/2
         trans_verts = util.batch_orth_proj(verts, codedict['cam']); trans_verts[:,:,1:] = -trans_verts[:,:,1:]
-        print("landmarks2d now ",landmarks2d)
+        # print("landmarks2d now ",landmarks2d)
         opdict = {
             'verts': verts,
             'trans_verts': trans_verts,
@@ -204,7 +204,7 @@ class DECA(nn.Module):
             # import ipdb; ipdb.set_trace()
             trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
             landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
-            print("landmarks2d now ",landmarks2d)
+            # print("landmarks2d now ",landmarks2d)
             landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
             background = original_image
             images = original_image
@@ -268,7 +268,7 @@ class DECA(nn.Module):
                 uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (torch.ones_like(uv_gt[:,:3,:,:])*(1-self.uv_face_eye_mask)*0.7)
             
             opdict['uv_texture_gt'] = uv_texture_gt
-            print("landmarks2d now LAST",landmarks2d)
+            # print("landmarks2d now LAST",landmarks2d)
             visdict = {
                 'inputs': images, 
                 'landmarks2d': util.tensor_vis_landmarks(images, landmarks2d),
@@ -292,7 +292,8 @@ class DECA(nn.Module):
         batch_size = images.shape[0]
         print("Decoding FAST")
         ## decode
-        verts, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
+        verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=None)
+        _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
         if self.cfg.model.use_tex:
             print("flametex")
             albedo = self.flametex(codedict['tex'])
@@ -300,18 +301,22 @@ class DECA(nn.Module):
             print("torch")
             albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
         landmarks3d_world = landmarks3d.clone()
-
+        landmarks2d_world = landmarks2d.clone()
         ## projection
         landmarks2d = util.batch_orth_proj(landmarks2d, codedict['cam'])[:,:,:2]; landmarks2d[:,:,1:] = -landmarks2d[:,:,1:]#; landmarks2d = landmarks2d*self.image_size/2 + self.image_size/2
         landmarks3d = util.batch_orth_proj(landmarks3d, codedict['cam']); landmarks3d[:,:,1:] = -landmarks3d[:,:,1:] #; landmarks3d = landmarks3d*self.image_size/2 + self.image_size/2
         trans_verts = util.batch_orth_proj(verts, codedict['cam']); trans_verts[:,:,1:] = -trans_verts[:,:,1:]
-        print("landmarks2d now ",landmarks2d)
+        trans_verts_original = trans_verts.clone()
+        
+        # print("landmarks2d now ",landmarks2d)
         opdict = {
             'verts': verts,
             'trans_verts': trans_verts,
             'landmarks2d': landmarks2d,
             'landmarks3d': landmarks3d,
             'landmarks3d_world': landmarks3d_world,
+            'landmarks2d_world': landmarks2d,
+            'trans_verts_original': trans_verts_original
         }
         
         if full_res_landmarks2D and original_image is not None and tform is not None :
