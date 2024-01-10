@@ -667,7 +667,8 @@ def extract_full_res_landmarks(landmarks, image):
     # extrapolate dimensions we need
     image_shape = (image[0].shape[1],image[0].shape[2])
     print("extract_full_res_landmarks image_shape",image_shape," [0]",image_shape[0],"[1]",image_shape[1])
-    print("extract_full_res_landmarks IN are",landmarks.shape,landmarks)
+    # print("extract_full_res_landmarks IN are",landmarks.shape,landmarks)
+    print("extract_full_res_landmarks IN are",landmarks.shape)
 
     full_res_landmarks = []
     predicted_landmarks = landmarks.detach().cpu().numpy()
@@ -686,7 +687,8 @@ def extract_full_res_landmarks(landmarks, image):
     
     # Convert the list of full resolution landmarks to a numpy array
     full_res_landmarks = np.array(full_res_landmarks)
-    print('\n extract_full_res_landmarks landmarks are ',full_res_landmarks.shape, full_res_landmarks )
+    # print('\n extract_full_res_landmarks landmarks are ',full_res_landmarks.shape, full_res_landmarks )
+    print('\n extract_full_res_landmarks landmarks are ',full_res_landmarks.shape )
     return full_res_landmarks
 
 
