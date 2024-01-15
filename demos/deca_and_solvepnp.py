@@ -194,7 +194,7 @@ def main(args):
             solvepnp_times.append(solvepnp_time)
             
             # print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
-            print("AFTER PNP - translation_vector ", translation_vector.shape)
+            print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
                 
         # enable or disable to manage performances
         if args.drawLandmarks2d:
@@ -335,28 +335,35 @@ def show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation
     # Load the .obj file
     original_mesh = trimesh.load('data/head_template_centered.obj')
     
-    # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
-    # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
-    rotation_matrix = cv2.Rodrigues(rotation_vector)
-    print("Rotation is ", rotation_matrix[0])
-    original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
-    # breakpoint()
-    original_mesh.vertices += translation_vector.T
-    
+
     print(f'\nObj resizing: - BEFORE SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
     # Resize mesh to match 3cm distance between eye corners
     # scalePoints(original_mesh.vertices, 3827, 3619, 3)
     scalePoints(original_mesh.vertices, 3858, 3649, 3)
     print(f'\nObj resizing: - AFTER SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
     # Create a list to hold all meshes (original mesh + spheres)
+
+    # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
+    # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
+    rotation_matrix = cv2.Rodrigues(rotation_vector)
+    print("Rotation is ", rotation_matrix[0])
+    original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
+    landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
+    # breakpoint()
+    
+    # Translate original mesh in place where 3D landamrks are
+    # original_mesh.vertices += translation_vector.T
+
     original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
 
     all_meshes = [original_mesh]
     empty_obj = trimesh.PointCloud(vertices=[])
     landmarks3D_spheres = [empty_obj]
+    landmarks3D_rotated_spheres = [empty_obj]
     landmarks3D_original_spheres = [empty_obj]
     verts_spheres = [empty_obj]
     trans_verts_spheres = [empty_obj]
+    
     # all_spheres = [empty_obj]
 
     # Sphere parameters (you can adjust the radius and subdivisions)
@@ -371,8 +378,13 @@ def show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation
     # landmarks3D are WORLD
     for landmark in landmarks3D:
         sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions, color=red)
+        # all_meshes.append(sphere)
+        landmarks3D_spheres.append(sphere)   
+        
+    for landmark in landmarks_3D_rotated:
+        sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions, color=red)
         all_meshes.append(sphere)
-        landmarks3D_spheres.append(sphere)
+        landmarks3D_rotated_spheres.append(sphere)
         
     landmarks3D_original = opdict['landmarks3d'][0].cpu().numpy()[:, :3]
     scalePoints(landmarks3D_original, 39, 42, 3)
@@ -398,6 +410,7 @@ def show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation
     # Combine all meshes into a single mesh
     all_meshes = trimesh.util.concatenate(all_meshes)
     landmarks3d_mesh = trimesh.util.concatenate(landmarks3D_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
+    landmarks3d_rotated_mesh = trimesh.util.concatenate(landmarks3D_rotated_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
     landmarks3D_original_mesh = trimesh.util.concatenate(landmarks3D_original_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
     verts_mesh = trimesh.util.concatenate(verts_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
     trans_verts_mesh = trimesh.util.concatenate(trans_verts_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
@@ -405,6 +418,7 @@ def show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation
     
     all_meshes.export(f'{args.savefolder}/{i}all_meshes.obj')
     landmarks3d_mesh.export(f'{args.savefolder}/{i}landmarks3d_mesh.obj')
+    landmarks3d_rotated_mesh.export(f'{args.savefolder}/{i}landmarks3d_rotated_mesh.obj')
     landmarks3D_original_mesh.export(f'{args.savefolder}/{i}landmarks3D_original_mesh.obj')
     verts_mesh.export(f'{args.savefolder}/{i}verts_mesh.obj')
     trans_verts_mesh.export(f'{args.savefolder}/{i}trans_verts_mesh.obj')
