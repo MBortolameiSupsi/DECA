@@ -28,6 +28,8 @@ import time
 import open3d as o3d
 
 import trimesh
+import open3d as o3d
+
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -126,8 +128,9 @@ def main(args):
                 opdict, orig_visdict = deca.decode(codedict, render_orig=True, original_image=original_image, tform=tform)               
             else:
                 opdict = deca.decode_fast(codedict, original_image=original_image, tform=tform, use_detail=False, return_vis=False, full_res_landmarks2D=True)   
-            #opdict, visdict = deca.decode(codedict) #tensor
             
+            opdict = deca.decode_fast(codedict, original_image=original_image, tform=tform, use_detail=False, return_vis=False, full_res_landmarks2D=True)   
+
             end_decode = time.time()
             decode_time = end_decode - start_decode
             total_decode_time += decode_time
@@ -135,28 +138,22 @@ def main(args):
              
             # ---- LANDMARKS ----
             start_landmarks = time.time()
-            # landmarks3D = opdict['landmarks3d'][0].cpu().numpy()[:, :3]
-            landmarks3D = opdict['landmarks3d_world'][0].cpu().numpy()[:, :3]
-            #landmarks2D = opdict['landmarks2d'][0].cpu().numpy()
-            
-            print(f'\nImage {i}: - BEFORE SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
-            scalePoints(landmarks3D, 39, 42, 3)
-            landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
-            print(f'\nImage {i}: - AFTER SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
 
-            if full_res_slow:
-                landmarks2Dfullres = orig_visdict['landmarks2d_full_res'][0]
-            else:
-                landmarks2Dfullres = opdict['landmarks2d_full_res'][0]
+            landmarks3D = opdict['landmarks3d_world'][0].cpu().numpy()[:, :3]
+            print(f'\nImage {i}: - BEFORE SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
+            scaling_factor = scalePoints(landmarks3D, 39, 42, 3)
+            print(f'\nImage {i}: - AFTER SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
+            landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
+
+            # if full_res_slow:
+            #     landmarks2Dfullres = orig_visdict['landmarks2d_full_res'][0]
+            # else:
+            #     landmarks2Dfullres = opdict['landmarks2d_full_res'][0]
             
+            landmarks2Dfullres = opdict['landmarks2d_full_res'][0]
             landmarks2Dfullres = np.ascontiguousarray(landmarks2Dfullres, dtype=np.float32)
             
-            #landmarks2D = convert_normalized_to_pixels(landmarks2D, 224, 224, testdata[i])
-            #landmarks2D = np.ascontiguousarray(landmarks2D, dtype=np.float32)
-            
-
             all_landmarks3D[i] = landmarks3D
-            # all_landmarks2D[i] = landmarks2D         
             all_landmarks2D[i] = landmarks2Dfullres
             
             end_landmarks = time.time()
@@ -164,11 +161,14 @@ def main(args):
             total_landmark_time += landmarks_time
             landmark_times.append(landmarks_time)
 
-            #print("opdict['landmarks3d'] ",opdict['landmarks3d'][0].cpu().numpy()[:, :3])
-            # if full_res_slow:
-            #     print("orig_visdict['landmarks3d'] ",orig_visdict['landmarks3d'][0].cpu().numpy()[:, :3])
-            # print("BEFORE PNP - landmarks2Dfullres ",landmarks2Dfullres,"landmarks3D",landmarks3D.shape, landmarks3D)
             print("BEFORE PNP - landmarks2Dfullres ",landmarks2Dfullres.shape,"landmarks3D",landmarks3D.shape)
+            
+            vertices = opdict['verts'][0].cpu().numpy()[:, :3]
+            scalePoints(vertices, None, None, None, scaling_factor)
+            show_obj_with_landmarks3d(i, args, landmarks3D, vertices)
+
+            if args.drawLandmarks2d:
+                draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
             
             # ---- SOLVEPNP ----
             start_solvepnp = time.time()
@@ -193,12 +193,29 @@ def main(args):
             total_solvepnp_time += solvepnp_time
             solvepnp_times.append(solvepnp_time)
             
+            # Reproject point from 3D to 2D
+            image_reprojection = original_image[0].clone()
+           
+            # trans3D = np.eye(4)
+            # trans3D[:3, 3] = np.squeeze(translation_vector)
+            # trans3D[:3, :3] = cv2.Rodrigues(rotation_vector)[0]
+            
+            # P = camera_matrix @ trans3D
+            # P1 = np.matmul(camera_matrix, trans3D)
+            
+            landmarks2D_reproj, _ = cv2.projectPoints(landmarks3D, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+            # breakpoint()            
+
+            # Plot
+            draw_points(99, image_reprojection, np.squeeze(landmarks2D_reproj), testdata[i], args)
+
             # print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
             print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
-                
+            show_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector)
+
         # enable or disable to manage performances
-        if args.drawLandmarks2d:
-            draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
+        # if args.drawLandmarks2d:
+        #     draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
             #draw_points(i, original_image[0], landmarks2D, testdata[i])
         if args.saveLandmarks3dPly:
             save_landmarks3d_ply(i, landmarks3D, args)
@@ -209,7 +226,6 @@ def main(args):
         # show_obj_with_landmarks3d(i, landmarks3D_world, args)
         # breakpoint()
        
-        show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation_vector, codedict, opdict)
     
 # ---- outside loop, after all processing ended
     for i in range(len(testdata)):
@@ -273,11 +289,15 @@ def main(args):
 #                     cv2.imwrite(os.path.join(savefolder, name, 'orig_' + name + '_' + vis_name +'.jpg'), util.tensor2image(orig_visdict[vis_name][0]))
     # print(f'-- please check the results in {savefolder}')
 
-def scalePoints(points, fromPointIndex, toPointIndex, desiredSize):
-     eye_distance = math.dist(points[fromPointIndex], points[toPointIndex])
-     scaling_factor = desiredSize/eye_distance # 3 cm between real life corresponing points (eyes inner corners)
-     points *= scaling_factor
-     return scaling_factor
+def scalePoints(points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None):
+    if(fromPointIndex is not None and toPointIndex is not None):
+         eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
+         scalingFactor = desiredSize/eyeDistance # 3 cm between real life corresponing points (eyes inner corners)
+         points *= scalingFactor
+    elif (desiredScalingFactor is not None):
+        points *= desiredScalingFactor
+        scalingFactor = desiredScalingFactor
+    return scalingFactor
 
 def convert_normalized_to_pixels(normalized_points, image_width, image_height, imageData):
     pixel_points = []
@@ -329,100 +349,85 @@ def save_landmarks3d_ply(i, landmarks3D, args):
     save_path = f"{args.savefolder}/{i}_kpt3d.ply"
     # Write the point cloud to a PLY file with the header
     o3d.io.write_point_cloud(save_path, pcd)
-    
 
-def show_obj_with_landmarks3d(i, landmarks3D, args, rotation_vector, translation_vector, codedict, opdict):
+
+def show_obj_with_landmarks3d(i, args, landmarks3D, vertices):
     # Load the .obj file
-    original_mesh = trimesh.load('data/head_template_centered.obj')
-    
-
-    print(f'\nObj resizing: - BEFORE SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
+    # original_mesh = trimesh.load('data/head_template_centered.obj')
+   
+    # print(f'\nObj resizing: - BEFORE SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
     # Resize mesh to match 3cm distance between eye corners
     # scalePoints(original_mesh.vertices, 3827, 3619, 3)
-    scalePoints(original_mesh.vertices, 3858, 3649, 3)
-    print(f'\nObj resizing: - AFTER SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
+    # scalePoints(original_mesh.vertices, 3858, 3649, 3)
+    # print(f'\nObj resizing: - AFTER SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
     # Create a list to hold all meshes (original mesh + spheres)
 
     # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
     # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
-    rotation_matrix = cv2.Rodrigues(rotation_vector)
-    print("Rotation is ", rotation_matrix[0])
-    original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
-    landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
+    # rotation_matrix = cv2.Rodrigues(rotation_vector)
+    # print("Rotation is ", rotation_matrix[0])
+    # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
+    # landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
     # breakpoint()
     
     # Translate original mesh in place where 3D landamrks are
     # original_mesh.vertices += translation_vector.T
 
-    original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
+    # original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
 
-    all_meshes = [original_mesh]
-    empty_obj = trimesh.PointCloud(vertices=[])
-    landmarks3D_spheres = [empty_obj]
-    landmarks3D_rotated_spheres = [empty_obj]
-    landmarks3D_original_spheres = [empty_obj]
-    verts_spheres = [empty_obj]
-    trans_verts_spheres = [empty_obj]
+       
+    mesh_default = o3d.io.read_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\data\head_template_centered.ply')
+    mesh_default.vertices = o3d.utility.Vector3dVector(vertices)
+    o3d.io.write_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\mesh_expression.ply', mesh_default)
+
+    pc_landmarks3D_world = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(landmarks3D))
+    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_landmarks3D_world.ply', pc_landmarks3D_world)
     
-    # all_spheres = [empty_obj]
+    pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices))
+    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_vertices.ply', pc_vertices)
 
-    # Sphere parameters (you can adjust the radius and subdivisions)
-    sphere_radius = 0.05
-    sphere_subdivisions = 2
-    red = (255,0,0)
-    green = (0,255,0)
-    blue = (0,0,255)
-    purple = (128,0,128)
+def show_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector):
 
-    # Create a sphere for each landmark and add it to the list of meshes
-    # landmarks3D are WORLD
-    for landmark in landmarks3D:
-        sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions, color=red)
-        # all_meshes.append(sphere)
-        landmarks3D_spheres.append(sphere)   
-        
-    for landmark in landmarks_3D_rotated:
-        sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions, color=red)
-        all_meshes.append(sphere)
-        landmarks3D_rotated_spheres.append(sphere)
-        
-    landmarks3D_original = opdict['landmarks3d'][0].cpu().numpy()[:, :3]
-    scalePoints(landmarks3D_original, 39, 42, 3)
-    for landmark in landmarks3D_original:
-        sphere = create_sphere_at(center=landmark, radius=sphere_radius, subdivisions=sphere_subdivisions, color=green)
-        landmarks3D_original_spheres.append(sphere)
-
-    verts = opdict['verts'][0].cpu().numpy()[:, :3]
-    scalePoints(verts, 3827, 3619, 3)
-    for vert in verts:
-        sphere = create_sphere_at(center=vert, radius=sphere_radius, subdivisions=sphere_subdivisions, color=blue)
-        verts_spheres.append(sphere)    
+    # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
+    # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
+    rotation_matrix = cv2.Rodrigues(rotation_vector)
+    print("Rotation is ", rotation_matrix[0])
+    landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
+    vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
+    # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
+    # breakpoint()
     
-    trans_verts = opdict['trans_verts'][0].cpu().numpy()[:, :3]
-    scalePoints(trans_verts, 3827, 3619, 3)
-    for vert in trans_verts:
-        sphere = create_sphere_at(center=vert, radius=sphere_radius, subdivisions=sphere_subdivisions, color=purple)
-        trans_verts_spheres.append(sphere)    
-    # for vertex in original_mesh.vertices:
-    #     sphere = create_sphere_at(center=vertex, radius=sphere_radius, subdivisions=sphere_subdivisions)
-    #     all_spheres.append(sphere)
+    # Translate original mesh in place where 3D landamrks are
+    # original_mesh.vertices += translation_vector.T
 
-    # Combine all meshes into a single mesh
-    all_meshes = trimesh.util.concatenate(all_meshes)
-    landmarks3d_mesh = trimesh.util.concatenate(landmarks3D_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
-    landmarks3d_rotated_mesh = trimesh.util.concatenate(landmarks3D_rotated_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
-    landmarks3D_original_mesh = trimesh.util.concatenate(landmarks3D_original_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
-    verts_mesh = trimesh.util.concatenate(verts_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
-    trans_verts_mesh = trimesh.util.concatenate(trans_verts_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
-    # all_spheres_mesh = trimesh.util.concatenate(all_spheres[1:])  # Skip the first empty PointCloud    # Export the combined mesh to a new OBJ file
+    # original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
+
+    mesh_default_rotated = o3d.io.read_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\data\head_template_centered.ply')
+    mesh_default_rotated.vertices = o3d.utility.Vector3dVector(vertices_rotated)
+    o3d.io.write_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\mesh_expression_rotated.ply', mesh_default_rotated)
+
+    pc_landmarks3D_world_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(landmarks_3D_rotated))
+    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_landmarks3D_world_rotated.ply', pc_landmarks3D_world_rotated)
     
-    all_meshes.export(f'{args.savefolder}/{i}all_meshes.obj')
-    landmarks3d_mesh.export(f'{args.savefolder}/{i}landmarks3d_mesh.obj')
-    landmarks3d_rotated_mesh.export(f'{args.savefolder}/{i}landmarks3d_rotated_mesh.obj')
-    landmarks3D_original_mesh.export(f'{args.savefolder}/{i}landmarks3D_original_mesh.obj')
-    verts_mesh.export(f'{args.savefolder}/{i}verts_mesh.obj')
-    trans_verts_mesh.export(f'{args.savefolder}/{i}trans_verts_mesh.obj')
-    # all_spheres_mesh.export(f'{args.savefolder}/{i}all_spheres_modelWithLandmarks3D.obj')
+    pc_vertices_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices_rotated))
+    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_vertices_rotated.ply', pc_vertices_rotated)
+    
+    # Compute the normals of the mesh (useful for rendering)
+    mesh_default_rotated.compute_vertex_normals()
+    o3d.visualization.draw_geometries([mesh_default_rotated])
+
+def start_visualizer():
+    visualizer = o3d.visualization.Visualizer()
+    visualizer.create_window()
+    visualizer.add_geometry(mesh_default_rotated)
+    opt = visualizer.get_render_option()
+    opt.background_color = np.asarray([0.1, 0.1, 0.1])  # Dark grey background color
+
+    # Run the visualization
+    visualizer.run()
+    
+def stop_visualizer():
+    vis.destroy_window()
 
 # Function to plot a sphere at each landmark point
 def create_sphere_at(center, radius, subdivisions=3, color=(255,0,0) ):
