@@ -292,7 +292,18 @@ class DECA(nn.Module):
         batch_size = images.shape[0]
         print("Decoding FAST")
         ## decode
-        verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=None)
+        # zero_pose_params= torch.tensor([[0, 0, 0, 0, 0, 0]]).to('cuda:0')
+
+        straight_pose = codedict['pose'].clone()
+        straight_pose[:, :3] = torch.zeros_like(straight_pose[:, :3])
+        
+        # verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=zero_pose_params)
+        # _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
+        # breakpoint()
+        # verts, _, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=None)
+        # _, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
+        print(codedict["pose"])
+        verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=straight_pose)
         _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
         if self.cfg.model.use_tex:
             print("flametex")
@@ -302,6 +313,7 @@ class DECA(nn.Module):
             albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
         landmarks3d_world = landmarks3d.clone()
         landmarks2d_world = landmarks2d.clone()
+        
         ## projection
         landmarks2d = util.batch_orth_proj(landmarks2d, codedict['cam'])[:,:,:2]; landmarks2d[:,:,1:] = -landmarks2d[:,:,1:]#; landmarks2d = landmarks2d*self.image_size/2 + self.image_size/2
         landmarks3d = util.batch_orth_proj(landmarks3d, codedict['cam']); landmarks3d[:,:,1:] = -landmarks3d[:,:,1:] #; landmarks3d = landmarks3d*self.image_size/2 + self.image_size/2

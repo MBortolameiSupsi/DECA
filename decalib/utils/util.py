@@ -676,7 +676,7 @@ def extract_full_res_landmarks(landmarks, image):
     for i in range(predicted_landmarks.shape[0]):
         predicted_landmark = predicted_landmarks[i]
         
-        # Scale landmarks to full image resolution if flag is True
+        # Scale landmarks to full image resolution 
         
         full_res_landmark = predicted_landmark.copy()
         full_res_landmark[..., 0] = full_res_landmark[..., 0] * image_shape[1] / 2 + image_shape[1] / 2
