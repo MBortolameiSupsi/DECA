@@ -35,14 +35,21 @@ import open3d as o3d
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 #full_res_slow = True
 full_res_slow = False
-
 #use_original = True
 use_original = False
+# if use_original:
+#     from decalib.deca_original import DECA
+# else:
+#     from decalib.deca import DECA
 
-if use_original:
-    from decalib.deca_original import DECA
-else:
-    from decalib.deca import DECA
+# GLOBAL VARIABLES
+visualizer = None
+webcam = None
+global_args = None
+head_mesh = None
+
+
+from decalib.deca import DECA
 
 from decalib.datasets import datasets 
 from decalib.utils import util
@@ -50,6 +57,8 @@ from decalib.utils.config import cfg as deca_cfg
 from decalib.utils.tensor_cropper import transform_points
 
 def main(args):
+    global global_args
+    global_args = args
     # if args.rasterizer_type != 'standard':
     #     args.render_orig = False
     savefolder = args.savefolder
@@ -69,6 +78,9 @@ def main(args):
     dist_coeffs = np.asarray(dist_coeffs, dtype=np.float32)
 
     print('camera_matrix', camera_matrix, '\n dist_coeffs', dist_coeffs)
+
+    start_visualizer()
+    start_webcam()
 
     # run DECA
 
@@ -211,8 +223,8 @@ def main(args):
 
             # print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
             print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
-            show_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector)
-
+            # save_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector)
+            visualize(landmarks3D, vertices, rotation_vector, translation_vector)
         # enable or disable to manage performances
         # if args.drawLandmarks2d:
         #     draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
@@ -386,7 +398,7 @@ def show_obj_with_landmarks3d(i, args, landmarks3D, vertices):
     pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices))
     o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_vertices.ply', pc_vertices)
 
-def show_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector):
+def save_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector):
 
     # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
     # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
@@ -402,32 +414,83 @@ def show_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translatio
 
     # original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
 
-    mesh_default_rotated = o3d.io.read_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\data\head_template_centered.ply')
+    mesh_default_rotated = o3d.io.read_triangle_mesh(args.templateMeshPath)
     mesh_default_rotated.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    o3d.io.write_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\mesh_expression_rotated.ply', mesh_default_rotated)
+    o3d.io.write_triangle_mesh(f'{args.savefolder}/{i}mesh_expression_rotated.ply', mesh_default_rotated)
 
     pc_landmarks3D_world_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(landmarks_3D_rotated))
-    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_landmarks3D_world_rotated.ply', pc_landmarks3D_world_rotated)
+    o3d.io.write_point_cloud(f'{args.savefolder}/{i}pc_landmarks3D_world_rotated.ply', pc_landmarks3D_world_rotated)
     
     pc_vertices_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices_rotated))
-    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_vertices_rotated.ply', pc_vertices_rotated)
+    o3d.io.write_point_cloud(f'{args.savefolder}/{i}pc_vertices_rotated.ply', pc_vertices_rotated)
     
     # Compute the normals of the mesh (useful for rendering)
     mesh_default_rotated.compute_vertex_normals()
     o3d.visualization.draw_geometries([mesh_default_rotated])
 
+
+def visualize(landmarks3D, vertices, rotation_vector, translation_vector):
+    global visualizer
+  
+    rotation_matrix = cv2.Rodrigues(rotation_vector)
+    print("Rotation is ", rotation_matrix[0])
+    landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
+    vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
+    # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
+    # breakpoint()
+    
+    # Translate original mesh in place where 3D landamrks are
+    # original_mesh.vertices += translation_vector.T
+    head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
+    visualizer.update_geometry(head_mesh)
+    
+    # Render the visualizer
+    visualizer.poll_events()
+    visualizer.update_renderer()
+    
+
 def start_visualizer():
+    global visualizer, global_args, head_mesh
     visualizer = o3d.visualization.Visualizer()
     visualizer.create_window()
-    visualizer.add_geometry(mesh_default_rotated)
+
     opt = visualizer.get_render_option()
     opt.background_color = np.asarray([0.1, 0.1, 0.1])  # Dark grey background color
 
+    head_mesh = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
+    head_mesh.compute_vertex_normals()
+    visualizer.add_geometry(head_mesh)
     # Run the visualization
-    visualizer.run()
+    # visualizer.run()
+    
+def start_webcam():
+     # Capture video from the first camera device
+    webcam = cv2.VideoCapture(0)
+
+    # Check if the video stream is opened successfully
+    if not webcam.isOpened():
+        print("Error: Could not open video stream.")
+        exit()
+
+    # Set the window name
+    window_name = 'Webcam Augmented Feed'
+
+    # Create a window to display the frames
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    # Set the desired window size
+    desired_width = 1920
+    desired_height = 1200
+    cv2.resizeWindow(window_name, desired_width, desired_height)
     
 def stop_visualizer():
-    vis.destroy_window()
+    global visualizer
+    visualizer.destroy_window()
+    
+def stop_webcam():
+    global webcam
+     # Release the video capture object and close all windows
+    webcam.release()
+    # cv2.destroyAllWindows()
 
 # Function to plot a sphere at each landmark point
 def create_sphere_at(center, radius, subdivisions=3, color=(255,0,0) ):
@@ -496,6 +559,8 @@ if __name__ == '__main__':
                         help='whether to save visualization output as seperate images' )
     
     # Additional Arguments not in original lib
+    parser.add_argument('--templateMeshPath', default="data\head_template_centered.ply", type=str,
+                        help='path to the ply template mesh for visualisation' )
     parser.add_argument('--calibrationData', default="Python Camera Calibration/calibration_data_webcam_side.npz", type=str,
                         help='calibration data with camera matrix and distortion coefficients as result of manual calibration' )
     parser.add_argument('--drawLandmarks2d', default=False, type=lambda x: x.lower() in ['true', '1'],
