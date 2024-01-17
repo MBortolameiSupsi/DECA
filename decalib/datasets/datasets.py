@@ -143,3 +143,71 @@ class TestData(Dataset):
                 'bbox': bbox,
                 'bbox2point': self.bbox2point
                 }
+    
+class CameraData(Dataset):
+    def __init__(self, image, face_detector, iscrop=True, crop_size=224, scale=1.25):
+        self.image = image
+        self.crop_size = crop_size
+        self.scale = scale
+        self.iscrop = iscrop
+        self.resolution_inp = crop_size
+        self.face_detector = face_detector
+    
+    def __len__(self):
+        # We only have one image in the dataset
+        return 1
+    def __getitem__(self, idx):
+        """
+        Since we only have one image, we ignore the idx and always return the same image.
+        """
+        return self.processCameraData()
+
+    def bbox2point(self, left, right, top, bottom, type='bbox'):
+        ''' bbox from detector and landmarks are different
+        '''
+        if type=='kpt68':
+            old_size = (right - left + bottom - top)/2*1.1
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0 ])
+        elif type=='bbox':
+            old_size = (right - left + bottom - top)/2
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0  + old_size*0.12])
+        else:
+            raise NotImplementedError
+        return old_size, center
+
+    def processCameraData(self):
+        image = np.array(self.image)
+        if len(image.shape) == 2:
+            image = image[:,:,None].repeat(1,1,3)
+        if len(image.shape) == 3 and image.shape[2] > 3:
+            image = image[:,:,:3]
+
+        h, w, _ = image.shape
+        if self.iscrop:
+            bbox, bbox_type = self.face_detector.run(image)
+            if len(bbox) < 4:
+                print('no face detected! run original image')
+                left = 0; right = h-1; top=0; bottom=w-1
+            else:
+                left = bbox[0]; right=bbox[2]
+                top = bbox[1]; bottom=bbox[3]
+            old_size, center = self.bbox2point(left, right, top, bottom, type=bbox_type)
+            size = int(old_size*self.scale)
+            src_pts = np.array([[center[0]-size/2, center[1]-size/2], [center[0] - size/2, center[1]+size/2], [center[0]+size/2, center[1]-size/2]])
+        else:
+            src_pts = np.array([[0, 0], [0, h-1], [w-1, 0]])
+        
+        DST_PTS = np.array([[0,0], [0,self.resolution_inp - 1], [self.resolution_inp - 1, 0]])
+        tform = estimate_transform('similarity', src_pts, DST_PTS)
+        
+        image = image/255.
+
+        dst_image = warp(image, tform.inverse, output_shape=(self.resolution_inp, self.resolution_inp))
+        dst_image = dst_image.transpose(2,0,1)
+        return {'image': torch.tensor(dst_image).float(),
+                'imagename': 'frame',
+                'tform': torch.tensor(tform.params).float(),
+                'original_image': torch.tensor(image.transpose(2,0,1)).float(),
+                'bbox': bbox,
+                'bbox2point': self.bbox2point
+                }
