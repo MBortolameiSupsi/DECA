@@ -15,6 +15,7 @@
 
 import os, sys
 from re import S
+from tkinter import END
 import cv2
 import numpy as np
 from time import time
@@ -31,24 +32,7 @@ import trimesh
 import open3d as o3d
 
 
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-#full_res_slow = True
-full_res_slow = False
-#use_original = True
-use_original = False
-# if use_original:
-#     from decalib.deca_original import DECA
-# else:
-#     from decalib.deca import DECA
-
-# GLOBAL VARIABLES
-visualizer = None
-webcam = None
-global_args = None
-head_mesh = None
-
-
 from decalib.deca import DECA
 
 from decalib.datasets import datasets 
@@ -56,11 +40,16 @@ from decalib.utils import util
 from decalib.utils.config import cfg as deca_cfg
 from decalib.utils.tensor_cropper import transform_points
 
+
+# GLOBAL VARIABLES
+global_args = None
+head_mesh = None
+
+
 def main(args):
     global global_args
     global_args = args
-    # if args.rasterizer_type != 'standard':
-    #     args.render_orig = False
+  
     savefolder = args.savefolder
     device = args.device
     os.makedirs(savefolder, exist_ok=True)
@@ -77,10 +66,7 @@ def main(args):
     camera_matrix = np.asarray(camera_matrix, dtype=np.float32)
     dist_coeffs = np.asarray(dist_coeffs, dtype=np.float32)
 
-    print('camera_matrix', camera_matrix, '\n dist_coeffs', dist_coeffs)
-
-    start_visualizer()
-    start_webcam()
+    # print('camera_matrix', camera_matrix, '\n dist_coeffs', dist_coeffs)
 
     # run DECA
 
@@ -99,30 +85,62 @@ def main(args):
     total_decode_time = 0
     total_landmark_time = 0
     total_solvepnp_time = 0
+    
     encoding_times = []
     decoding_times = []
     landmark_times = []
     solvepnp_times = []
+    iteration_times = []
+    get_image_times = []
+    prepare_times = []
+    prepare_image_times = []
+    prepare_tform_times = []
+    prepare_origimage_times = []
+    
     # results
     distances = []
     all_landmarks3D = np.empty((len(testdata), 68, 3))
     all_landmarks2D = np.empty((len(testdata), 68, 2))
     
-    # Explicitly specify the flag (try different flags if necessary)
-    # flags = cv2.SOLVEPNP_EPNP  # Example flag, adjust as needed
-
-    print("FULL RES SLOW ", full_res_slow, "deca original ",use_original)
     for i in tqdm(range(len(testdata))):
-        name = testdata[i]['imagename']
-        image = testdata[i]['image'].to(device)[None,...]
+        start_prepare = time.time()
         
-        tform = testdata[i]['tform'][None, ...]
+        start_get_image = time.time()
+        current_image = testdata[i]
+        end_get_image = time.time()
+        get_image_time = end_get_image - start_get_image
+        get_image_times.append(get_image_time)
+        
+        start_prepare_image = time.time()
+        name = current_image['imagename']
+        image = current_image['image'].to(device)[None,...]
+        end_prepare_image = time.time()
+        prepare_image_time = end_prepare_image - start_prepare_image
+        prepare_image_times.append(prepare_image_time)
+        
+        start_prepare_tform = time.time()
+        tform = current_image['tform'][None, ...]
         tform = torch.inverse(tform).transpose(1,2).to(device)
+        end_prepare_tform = time.time()
+        prepare_tform_time = end_prepare_tform - start_prepare_tform
+        prepare_tform_times.append(prepare_tform_time)
+        
         # print("TFORM ", tform.shape, tform)
-        print("TFORM ", tform.shape)
-        original_image = testdata[i]['original_image'][None, ...].to(device)
+        # print("TFORM ", tform.shape)
+        start_prepare_origimage = time.time()
+        original_image = current_image['original_image'][None, ...].to(device)
+        # NOTE: doesn't this call the getter two times with the related overhead
+        _, image_height, image_width = current_image['original_image'].shape
+        end_prepare_origimage = time.time()
+        prepare_origimage_time = end_prepare_origimage - start_prepare_origimage
+        prepare_origimage_times.append(prepare_origimage_time)
+        
+        end_prepare = time.time()
+        prepare_time = end_prepare - start_prepare
+        prepare_times.append(prepare_time)
+                
 
-        _, image_height, image_width = testdata[i]['original_image'].shape
+        start_iteration = time.time()
         #breakpoint()
         with torch.no_grad():
             # ---- ENCODING ----
@@ -135,12 +153,7 @@ def main(args):
             
             # ---- DECODING ----
             start_decode = time.time()
-            
-            if full_res_slow:
-                opdict, orig_visdict = deca.decode(codedict, render_orig=True, original_image=original_image, tform=tform)               
-            else:
-                opdict = deca.decode_fast(codedict, original_image=original_image, tform=tform, use_detail=False, return_vis=False, full_res_landmarks2D=True)   
-            
+             
             opdict = deca.decode_fast(codedict, original_image=original_image, tform=tform, use_detail=False, return_vis=False, full_res_landmarks2D=True)   
 
             end_decode = time.time()
@@ -152,9 +165,9 @@ def main(args):
             start_landmarks = time.time()
 
             landmarks3D = opdict['landmarks3d_world'][0].cpu().numpy()[:, :3]
-            print(f'\nImage {i}: - BEFORE SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
+            # print(f'\nImage {i}: - BEFORE SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
             scaling_factor = scalePoints(landmarks3D, 39, 42, 3)
-            print(f'\nImage {i}: - AFTER SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
+            # print(f'\nImage {i}: - AFTER SCALING eye_distance is {math.dist(landmarks3D[39], landmarks3D[42])}')
             landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
 
             # if full_res_slow:
@@ -173,14 +186,15 @@ def main(args):
             total_landmark_time += landmarks_time
             landmark_times.append(landmarks_time)
 
-            print("BEFORE PNP - landmarks2Dfullres ",landmarks2Dfullres.shape,"landmarks3D",landmarks3D.shape)
+            # print("BEFORE PNP - landmarks2Dfullres ",landmarks2Dfullres.shape,"landmarks3D",landmarks3D.shape)
             
             vertices = opdict['verts'][0].cpu().numpy()[:, :3]
             scalePoints(vertices, None, None, None, scaling_factor)
-            show_obj_with_landmarks3d(i, args, landmarks3D, vertices)
 
             if args.drawLandmarks2d:
-                draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
+                draw_points(i, original_image[0], landmarks2Dfullres, current_image)
+            if args.saveObjWithLandmarks3d:
+                save_obj_with_landmarks3d(i, landmarks3D, vertices)
             
             # ---- SOLVEPNP ----
             start_solvepnp = time.time()
@@ -205,37 +219,27 @@ def main(args):
             total_solvepnp_time += solvepnp_time
             solvepnp_times.append(solvepnp_time)
             
-            # Reproject point from 3D to 2D
-            image_reprojection = original_image[0].clone()
-           
-            # trans3D = np.eye(4)
-            # trans3D[:3, 3] = np.squeeze(translation_vector)
-            # trans3D[:3, :3] = cv2.Rodrigues(rotation_vector)[0]
-            
-            # P = camera_matrix @ trans3D
-            # P1 = np.matmul(camera_matrix, trans3D)
-            
-            landmarks2D_reproj, _ = cv2.projectPoints(landmarks3D, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+            end_iteration = time.time()
+            iteration_time = end_iteration - start_iteration
+            iteration_times.append(iteration_time)
+            # Verify : Reproject point from 3D to 2D
+            if args.drawLandmarks2d:
+                image_reprojection = original_image[0].clone()            
+                landmarks2D_reproj, _ = cv2.projectPoints(landmarks3D, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+                draw_points(99, image_reprojection, np.squeeze(landmarks2D_reproj), current_image)
             # breakpoint()            
 
-            # Plot
-            draw_points(99, image_reprojection, np.squeeze(landmarks2D_reproj), testdata[i], args)
-
             # print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
-            print("AFTER PNP - translation_vector ", translation_vector.shape, translation_vector)
-            # save_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector)
-            visualize(landmarks3D, vertices, rotation_vector, translation_vector)
+            if args.saveObjPNP:
+                save_obj_with_landmarks3d_rotated(i, landmarks3D, vertices, translation_vector, rotation_vector)
+       
         # enable or disable to manage performances
-        # if args.drawLandmarks2d:
-        #     draw_points(i, original_image[0], landmarks2Dfullres, testdata[i], args)
-            #draw_points(i, original_image[0], landmarks2D, testdata[i])
         if args.saveLandmarks3dPly:
-            save_landmarks3d_ply(i, landmarks3D, args)
+            save_landmarks3d_ply(i, landmarks3D)
         if args.saveLandmarksTxt:
-            save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D, args)
+            save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D)
         if args.saveDistances:
-            save_distances(i, distance, args)
-        # show_obj_with_landmarks3d(i, landmarks3D_world, args)
+            save_distances(i, distance)
         # breakpoint()
        
     
@@ -246,61 +250,26 @@ def main(args):
         print(f"Image ",i," - Landmark time -", landmark_times[i])
         print(f"Image ",i," - Solvepnp time -", solvepnp_times[i])
         print(f"Image ",i," - Distance is -", distances[i])
+    for i in range(len(testdata)):
+        print(f"Image ",i," - Get image time is -", get_image_times[i])
+        print(f"Image ",i," - Prepare image time is -", prepare_image_times[i])
+        print(f"Image ",i," - Prepare tform time is -", prepare_tform_times[i])
+        print(f"Image ",i," - Prepare orig image time is -", prepare_origimage_times[i])
+        print(f"Image ",i," - PREPARE total time is -", prepare_times[i])
+        print(f"Image ",i," - ITERATION TIME is -", iteration_times[i])
+        print(f"Image ",i," - TOTAL TIME is -", prepare_times[i]+iteration_times[i])
+        print(f"---------------------", )
 
-    print(f"Total encoding time for all images - {total_encode_time}")
-    print(f"Total decoding time for all images - {total_decode_time}")
-    print(f"Average encoding time per image - {total_encode_time / len(testdata)}")
-    print(f"Average decoding time per image - {total_decode_time / len(testdata)}")   
-    print(f"Total Landmark time for all images - {total_landmark_time}")
-    print(f"Total Solvepnp time for all images - {total_solvepnp_time}")
+    # print(f"Total encoding time for all images - {total_encode_time}")
+    # print(f"Total decoding time for all images - {total_decode_time}")
+    # print(f"Average encoding time per image - {total_encode_time / len(testdata)}")
+    # print(f"Average decoding time per image - {total_decode_time / len(testdata)}")   
+    # print(f"Total Landmark time for all images - {total_landmark_time}")
+    # print(f"Total Solvepnp time for all images - {total_solvepnp_time}")
     
     if args.saveAllLandmarksAndDistances:
-        save_allLandmarksAndDistances(all_landmarks3D, all_landmarks3D, distances, args)
+        save_allLandmarksAndDistances(all_landmarks3D, all_landmarks3D, distances)
     
-    # print('all_landmarks2D is ',all_landmarks2D)
-    #breakpoint()
-        # ---- ONLY TO PRINT ORIGINAL RESULTS ----
-        # opdict, visdict = deca.decode(codedict) #tensor
-        # tform = testdata[i]['tform'][None, ...]
-        # tform = torch.inverse(tform).transpose(1,2).to(device)
-        # original_image = testdata[i]['original_image'][None, ...].to(device)
-        # _, orig_visdict = deca.decode(codedict, render_orig=True, original_image=original_image, tform=tform)    
-        # orig_visdict['inputs'] = original_image 
-           
-#---- LEGACY ARGUMENTS FROM ORIGINAL DECA LIBRARY - use at own discretion ----
-#         if args.saveDepth or args.saveKpt or args.saveObj or args.saveMat or args.saveImages:
-#             os.makedirs(os.path.join(savefolder, name), exist_ok=True)
-# ##        -- save results
-#         if args.saveDepth:
-#             depth_image = deca.render.render_depth(opdict['trans_verts']).repeat(1,3,1,1)
-#             visdict['depth_images'] = depth_image
-#             cv2.imwrite(os.path.join(savefolder, name, name + '_depth.jpg'), util.tensor2image(depth_image[0]))
-        # if args.saveKpt:
-        #      np.savetxt(os.path.join(savefolder, name, name + '_kpt2d.txt'), opdict['landmarks2d'][0].cpu().numpy())
-        #      np.savetxt(os.path.join(savefolder, name, name + '_kpt3d.txt'), opdict['landmarks3d'][0].cpu().numpy())
-#         if args.saveObj:
-#             deca.save_obj(os.path.join(savefolder, name, name + '.obj'), opdict)
-#         if args.saveMat:
-#             opdict = util.dict_tensor2npy(opdict)
-#             savemat(os.path.join(savefolder, name, name + '.mat'), opdict)
-#         if args.saveVis:
-#             cv2.imwrite(os.path.join(savefolder, name + '_vis.jpg'), deca.visualize(visdict))
-#             if args.render_orig:
-#                 print("saving vis")
-#                 cv2.imwrite(os.path.join(savefolder, name + '_vis_original_size.jpg'), deca.visualize(orig_visdict))
-#         if args.saveImages:
-#             for vis_name in ['inputs', 'rendered_images', 'albedo_images', 'shape_images', 'shape_detail_images', 'landmarks2d']:
-#                 if vis_name not in visdict.keys():
-#                     continue
-#                 image = util.tensor2image(visdict[vis_name][0])
-#                 print("saving images 1")
-#                 cv2.imwrite(os.path.join(savefolder, name, name + '_' + vis_name +'.jpg'), util.tensor2image(visdict[vis_name][0]))
-#                 if args.render_orig:
-#                     print("saving images 2")
-#                     image = util.tensor2image(orig_visdict[vis_name][0])
-#                     cv2.imwrite(os.path.join(savefolder, name, 'orig_' + name + '_' + vis_name +'.jpg'), util.tensor2image(orig_visdict[vis_name][0]))
-    # print(f'-- please check the results in {savefolder}')
-
 def scalePoints(points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None):
     if(fromPointIndex is not None and toPointIndex is not None):
          eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
@@ -336,7 +305,7 @@ def convert_normalized_to_pixels(normalized_points, image_width, image_height, i
     #breakpoint()
     return pixel_points
 
-def draw_points(i, image_tensor, landmarks2D, imageData, args):
+def draw_points(i, image_tensor, landmarks2D, imageData):
     image_numpy = (image_tensor.permute(1, 2, 0).cpu().detach().numpy() * 255).astype(np.uint8)
     for point in landmarks2D:
          x, y = int(round(point[0])), int(round(point[1])) 
@@ -347,58 +316,35 @@ def draw_points(i, image_tensor, landmarks2D, imageData, args):
     cv2.rectangle(image_numpy, (int(left), int(top)), (int(right), int(bottom)), (0, 255, 0), 2)
     #breakpoint()
 
-    cv2.imwrite(f"{args.savefolder}/result_{i}_with_landmarks.png", image_numpy)   
+    cv2.imwrite(f"{global_args.savefolder}/{i}_with_landmarks.png", image_numpy)   
     
     #cv2.imshow('Landmarks', image_numpy)
     #cv2.waitKey(0)
     #cv2.destroyAllWindows()
 
-def save_landmarks3d_ply(i, landmarks3D, args):
+def save_landmarks3d_ply(i, landmarks3D):
     #breakpoint()
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(landmarks3D)
-    save_path = f"{args.savefolder}/{i}_kpt3d.ply"
+    save_path = f"{global_args.savefolder}/{i}_kpt3d.ply"
     # Write the point cloud to a PLY file with the header
     o3d.io.write_point_cloud(save_path, pcd)
 
 
-def show_obj_with_landmarks3d(i, args, landmarks3D, vertices):
-    # Load the .obj file
-    # original_mesh = trimesh.load('data/head_template_centered.obj')
-   
-    # print(f'\nObj resizing: - BEFORE SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
-    # Resize mesh to match 3cm distance between eye corners
-    # scalePoints(original_mesh.vertices, 3827, 3619, 3)
-    # scalePoints(original_mesh.vertices, 3858, 3649, 3)
-    # print(f'\nObj resizing: - AFTER SCALING eye_distance is {math.dist(original_mesh.vertices[3858], original_mesh.vertices[3649])}')
-    # Create a list to hold all meshes (original mesh + spheres)
-
-    # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
-    # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
-    # rotation_matrix = cv2.Rodrigues(rotation_vector)
-    # print("Rotation is ", rotation_matrix[0])
-    # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
-    # landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
-    # breakpoint()
+def save_obj_with_landmarks3d(i, landmarks3D, vertices):
     
-    # Translate original mesh in place where 3D landamrks are
-    # original_mesh.vertices += translation_vector.T
-
-    # original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
-
-       
-    mesh_default = o3d.io.read_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\data\head_template_centered.ply')
+    mesh_default = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
     mesh_default.vertices = o3d.utility.Vector3dVector(vertices)
-    o3d.io.write_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\mesh_expression.ply', mesh_default)
+    o3d.io.write_triangle_mesh(f'{global_args.savefolder}/{i}_mesh_expression.ply', mesh_default)
 
     pc_landmarks3D_world = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(landmarks3D))
-    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_landmarks3D_world.ply', pc_landmarks3D_world)
+    o3d.io.write_point_cloud(f'{global_args.savefolder}/{i}_pc_landmarks3D_world.ply', pc_landmarks3D_world)
     
     pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices))
-    o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\pc_vertices.ply', pc_vertices)
+    o3d.io.write_point_cloud(f'{global_args.savefolder}/{i}_pc_vertices.ply', pc_vertices)
 
-def save_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translation_vector, rotation_vector):
+def save_obj_with_landmarks3d_rotated(i, landmarks3D, vertices, translation_vector, rotation_vector):
 
     # rotation_vector_deca = codedict['pose'].cpu().numpy()[0][:3]  # Extract the first three elements
     # rotation_matrix = cv2.Rodrigues(rotation_vector_deca)
@@ -412,110 +358,33 @@ def save_obj_with_landmarks3d_rotated(i, args, landmarks3D, vertices, translatio
     # Translate original mesh in place where 3D landamrks are
     # original_mesh.vertices += translation_vector.T
 
-    # original_mesh.export(f'{args.savefolder}/{i}scaledModel.obj')
+    # original_mesh.export(f'{args.savefolder}/{i}_scaledModel.obj')
 
-    mesh_default_rotated = o3d.io.read_triangle_mesh(args.templateMeshPath)
+    mesh_default_rotated = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
     mesh_default_rotated.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    o3d.io.write_triangle_mesh(f'{args.savefolder}/{i}mesh_expression_rotated.ply', mesh_default_rotated)
+    o3d.io.write_triangle_mesh(f'{global_args.savefolder}/{i}_mesh_expression_rotated.ply', mesh_default_rotated)
 
     pc_landmarks3D_world_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(landmarks_3D_rotated))
-    o3d.io.write_point_cloud(f'{args.savefolder}/{i}pc_landmarks3D_world_rotated.ply', pc_landmarks3D_world_rotated)
+    o3d.io.write_point_cloud(f'{global_args.savefolder}/{i}_pc_landmarks3D_world_rotated.ply', pc_landmarks3D_world_rotated)
     
     pc_vertices_rotated = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(vertices_rotated))
-    o3d.io.write_point_cloud(f'{args.savefolder}/{i}pc_vertices_rotated.ply', pc_vertices_rotated)
+    o3d.io.write_point_cloud(f'{global_args.savefolder}/{i}_pc_vertices_rotated.ply', pc_vertices_rotated)
     
     # Compute the normals of the mesh (useful for rendering)
     mesh_default_rotated.compute_vertex_normals()
     o3d.visualization.draw_geometries([mesh_default_rotated])
 
 
-def visualize(landmarks3D, vertices, rotation_vector, translation_vector):
-    global visualizer
-  
-    rotation_matrix = cv2.Rodrigues(rotation_vector)
-    print("Rotation is ", rotation_matrix[0])
-    landmarks_3D_rotated = np.dot(landmarks3D, rotation_matrix[0].T)
-    vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
-    # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
-    # breakpoint()
+def save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D):
+    np.savetxt(f'{global_args.savefolder}/{i}_landmarks2d.txt', landmarks2Dfullres)
+    np.savetxt(f'{global_args.savefolder}/{i}_landmarks3d.txt', landmarks3D)  
     
-    # Translate original mesh in place where 3D landamrks are
-    # original_mesh.vertices += translation_vector.T
-    head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    visualizer.update_geometry(head_mesh)
+def save_distances(i, distance):
+    np.savetxt(f'{global_args.savefolder}/{i}_distance.txt', distance)  
     
-    # Render the visualizer
-    visualizer.poll_events()
-    visualizer.update_renderer()
-    
-
-def start_visualizer():
-    global visualizer, global_args, head_mesh
-    visualizer = o3d.visualization.Visualizer()
-    visualizer.create_window()
-
-    opt = visualizer.get_render_option()
-    opt.background_color = np.asarray([0.1, 0.1, 0.1])  # Dark grey background color
-
-    head_mesh = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
-    head_mesh.compute_vertex_normals()
-    visualizer.add_geometry(head_mesh)
-    # Run the visualization
-    # visualizer.run()
-    
-def start_webcam():
-     # Capture video from the first camera device
-    webcam = cv2.VideoCapture(0)
-
-    # Check if the video stream is opened successfully
-    if not webcam.isOpened():
-        print("Error: Could not open video stream.")
-        exit()
-
-    # Set the window name
-    window_name = 'Webcam Augmented Feed'
-
-    # Create a window to display the frames
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    # Set the desired window size
-    desired_width = 1920
-    desired_height = 1200
-    cv2.resizeWindow(window_name, desired_width, desired_height)
-    
-def stop_visualizer():
-    global visualizer
-    visualizer.destroy_window()
-    
-def stop_webcam():
-    global webcam
-     # Release the video capture object and close all windows
-    webcam.release()
-    # cv2.destroyAllWindows()
-
-# Function to plot a sphere at each landmark point
-def create_sphere_at(center, radius, subdivisions=3, color=(255,0,0) ):
-    # Create a sphere mesh
-    sphere = trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
-    # Translate the sphere to the landmark position
-    sphere.apply_translation(center)
-    
-    # Apply the color to each vertex of the sphere
-    # Vertex colors need to be in the shape of (num_vertices, 4)
-    sphere.visual.vertex_colors = np.array([color] * len(sphere.vertices), dtype=np.uint8)
-                                           
-    return sphere
-
-def save_landmarks2d3d_txt(i, landmarks2Dfullres, landmarks3D, args):
-    np.savetxt(f'{args.savefolder}/{i}_landmarks2d.txt', landmarks2Dfullres)
-    np.savetxt(f'{args.savefolder}/{i}_landmarks3d.txt', landmarks3D)  
-    
-def save_distances(i, distance, args):
-    np.savetxt(f'{args.savefolder}/{i}_distance.txt', distance)  
-    
-def save_allLandmarksAndDistances(all_landmarks3D, all_landmarks2D, distances, args):
-    suffix = 'slow' if full_res_slow else 'fast'
-    np.savez(f'{args.savefolder}/all_landmarks3D'+ suffix+'.npz', all_landmarks3D = all_landmarks3D)
-    np.savez(f'{args.savefolder}/all_landmarks2D'+ suffix+'.npz', all_landmarks2D = all_landmarks2D)
+def save_allLandmarksAndDistances(all_landmarks3D, all_landmarks2D, distances):
+    np.savez(f'{global_args.savefolder}/all_landmarks3D.npz', all_landmarks3D = all_landmarks3D)
+    np.savez(f'{global_args.savefolder}/all_landmarks2D.npz', all_landmarks2D = all_landmarks2D)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DECA + SolvePnP')
@@ -573,5 +442,9 @@ if __name__ == '__main__':
                         help='save distance between face and camera for each input image' )
     parser.add_argument('--saveAllLandmarksAndDistances', default=False, type=lambda x: x.lower() in ['true', '1'],
                         help='save one big file for each of landmarks 2d, 3d, and distances, but with data for all input images' )
+    parser.add_argument('--saveObjWithLandmarks3d', default=False, type=lambda x: x.lower() in ['true', '1'],
+                        help='save for each img the obj morphed to the recognised verts, the verts point cloud, the landmarks3d point cloud' )
+    parser.add_argument('--saveObjPNP', default=False, type=lambda x: x.lower() in ['true', '1'],
+                        help='save the result of applying translation and rotation to the morphed obj' )
             
     main(parser.parse_args())

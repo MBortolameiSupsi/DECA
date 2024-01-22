@@ -15,6 +15,7 @@
 
 import os, sys
 from re import S
+from turtle import st
 import cv2
 import numpy as np
 from time import time
@@ -81,6 +82,12 @@ def main(args):
 
     start_visualizer()
     start_webcam()
+    
+    deca_and_solvepnp_time = 0
+    start_time = 0
+    end_time = 0
+    
+    torch.set_grad_enabled(False)
 
     while True:
         # Read a frame
@@ -91,20 +98,20 @@ def main(args):
             print("Error: Can't receive frame (stream end?). Exiting ...")
             break
 
+        start_time = time.time()
         # Convert frame to RGB (OpenCV uses BGR by default)
         # cameraFrame = cv2.cvtColor(cameraFrame, cv2.COLOR_BGR2RGB)
 
-        imagedata = datasets.CameraData(cameraFrame, face_detector)
-        image = imagedata[0]["image"].to(device)[None, ...]
+        imagedata = datasets.CameraData(cameraFrame, face_detector)[0]
+        image = imagedata["image"].to(device)[None, ...]
 
-        tform = imagedata[0]["tform"][None, ...]
+        tform = imagedata["tform"][None, ...]
         tform = torch.inverse(tform).transpose(1, 2).to(device)
         # print("TFORM ", tform.shape, tform)
-        print("TFORM ", tform.shape)
-        original_image = imagedata[0]["original_image"][None, ...].to(device)
+        # print("TFORM ", tform.shape)
+        original_image = imagedata["original_image"][None, ...].to(device)
 
-        _, image_height, image_width = imagedata[0]["original_image"].shape
-        torch.set_grad_enabled(False)
+        _, image_height, image_width = imagedata["original_image"].shape
 
         # ---- ENCODING ----
         codedict = deca.encode(image)
@@ -146,14 +153,24 @@ def main(args):
             print(f"FAILED")
         # breakpoint()
 
-        visualize(landmarks3D, vertices, rotation_vector, translation_vector, cameraFrame)
-
-        torch.set_grad_enabled(True)
+        end_time = time.time()
+        deca_and_solvepnp_time = end_time - start_time
         
+        start_visualize_time = time.time()
+        visualize(landmarks2Dfullres, landmarks3D, vertices, rotation_vector, translation_vector, cameraFrame)
+        end_visualize_time = time.time()
+        visualize_time = end_visualize_time - start_visualize_time
+            
+        print(f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}]")
+
         if cv2.waitKey(1) == ord('q'):
             stop_visualizer()
             stop_webcam()
             break
+        if cv2.waitKey(1) == ord('s'):
+            save_obj_with_landmarks3d(landmarks3D, vertices)
+            break
+        
 
 
 def scalePoints(
@@ -183,7 +200,7 @@ def draw_points(i, image_tensor, landmarks2D, imageData, args):
     cv2.rectangle(image_numpy, (int(left), int(top)), (int(right), int(bottom)), (0, 255, 0), 2)
 
 
-def visualize(landmarks3D, vertices, rotation_vector, translation_vector, frame):
+def visualize(landmarks2Dfullres, landmarks3D, vertices, rotation_vector, translation_vector, frame):
     global visualizer, camera_window_name
 
     # rotation_matrix = cv2.Rodrigues(rotation_vector)
@@ -192,17 +209,37 @@ def visualize(landmarks3D, vertices, rotation_vector, translation_vector, frame)
     # vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
     # # original_mesh.vertices = np.dot(original_mesh.vertices, rotation_matrix[0].T)
     # # breakpoint()
+    head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
 
     # # Translate original mesh in place where 3D landamrks are
     # # original_mesh.vertices += translation_vector.T
     # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    # visualizer.update_geometry(head_mesh)
-
-    # # Render the visualizer
-    # visualizer.poll_events()
-    # visualizer.update_renderer()
+    head_mesh.compute_vertex_normals()  # If normals are not set, call this
+    visualizer.update_geometry(head_mesh)
+    visualizer.poll_events()
+    visualizer.update_renderer()
     
+    frame = draw_points(frame, landmarks2Dfullres)
     cv2.imshow(camera_window_name, frame)
+    
+def save_obj_with_landmarks3d(landmarks3D, vertices):
+    
+    head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
+    o3d.io.write_triangle_mesh(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\camera_feed\fromCameraFeed_mesh_expression.ply', head_mesh)
+
+# def draw_points(image, landmarks2D, imageData):
+def draw_points(image, landmarks2D):
+    # image_numpy = (image.permute(1, 2, 0).cpu().detach().numpy() * 255).astype(np.uint8)
+    for point in landmarks2D:
+         x, y = int(round(point[0])), int(round(point[1])) 
+         cv2.circle(image, (x, y), radius=5, color=(0, 0, 255), thickness=-1)
+         
+    # bbox = imageData['bbox']
+    # left, top, right, bottom = bbox
+    # cv2.rectangle(image_numpy, (int(left), int(top)), (int(right), int(bottom)), (0, 255, 0), 2)
+    #breakpoint()
+
+    return image
 
 
 
@@ -227,8 +264,10 @@ def start_webcam():
     # Capture video from the first camera device
     camera = cv2.VideoCapture(0)
     # Set the desired resolution
-    resolution_width = 1920
-    resolution_height = 1200
+    # resolution_width = 1920
+    # resolution_height = 1080
+    resolution_width = 480
+    resolution_height = 270
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution_width)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution_height)
     # Check if the video stream is opened successfully
