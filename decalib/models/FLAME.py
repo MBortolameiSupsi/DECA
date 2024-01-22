@@ -214,13 +214,13 @@ class FLAME(nn.Module):
                                        self.full_lmk_faces_idx.repeat(bz, 1),
                                        self.full_lmk_bary_coords.repeat(bz, 1, 1))
         
-        ####
-        import open3d as o3d
-        pc_landmarks = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(landmarks3d.cpu()))))
-        o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_landmarks.ply', pc_landmarks)
+        #### DEBUG
+        # import open3d as o3d
+        # pc_landmarks = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(landmarks3d.cpu()))))
+        # o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_landmarks.ply', pc_landmarks)
 
-        pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(vertices.cpu()))))
-        o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_vertices.ply', pc_vertices)
+        # pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(vertices.cpu()))))
+        # o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_vertices.ply', pc_vertices)
 
         return vertices, landmarks2d, landmarks3d
 

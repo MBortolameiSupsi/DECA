@@ -290,7 +290,7 @@ class DECA(nn.Module):
                 render_orig=False, original_image=None, tform=None, full_res_landmarks2D=False):
         images = codedict['images']
         batch_size = images.shape[0]
-        print("Decoding FAST")
+        # print("Decoding FAST")
         ## decode
         # zero_pose_params= torch.tensor([[0, 0, 0, 0, 0, 0]]).to('cuda:0')
 
@@ -302,14 +302,14 @@ class DECA(nn.Module):
         # breakpoint()
         # verts, _, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=None)
         # _, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
-        print(codedict["pose"])
+        # print(codedict["pose"])
         verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=straight_pose)
         _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
         if self.cfg.model.use_tex:
-            print("flametex")
+            # print("flametex")
             albedo = self.flametex(codedict['tex'])
         else:
-            print("torch")
+            # print("torch")
             albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
         landmarks3d_world = landmarks3d.clone()
         landmarks2d_world = landmarks2d.clone()
@@ -335,7 +335,7 @@ class DECA(nn.Module):
             images = original_image
             points_scale = [self.image_size, self.image_size]
             _, _, h, w = original_image.shape
-            print("full_res_landmarks2D points_scale self.image_size",self.image_size,"h", h, "w",w)
+            # print("full_res_landmarks2D points_scale self.image_size",self.image_size,"h", h, "w",w)
             # TODO: SERVE??? non si nota differenza
             #trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
             #
@@ -361,7 +361,7 @@ class DECA(nn.Module):
        
 
         if rendering:
-            print("rendering ")
+            # print("rendering ")
             # ops = self.render(verts, trans_verts, albedo, codedict['light'])
             ops = self.render(verts, trans_verts, albedo, h=h, w=w, background=background)
             ## output
@@ -388,7 +388,7 @@ class DECA(nn.Module):
             opdict['displacement_map'] = uv_z+self.fixed_uv_dis[None,None,:,:]
         
         if vis_lmk:
-            print("vis_lmk ")
+            # print("vis_lmk ")
             landmarks3d_vis = self.visofp(ops['transformed_normals'])#/self.image_size
             landmarks3d = torch.cat([landmarks3d, landmarks3d_vis], dim=2)
             opdict['landmarks3d'] = landmarks3d
