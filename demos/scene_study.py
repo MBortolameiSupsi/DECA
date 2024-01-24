@@ -74,47 +74,61 @@ def start_visualizer():
     opt = visualizer.get_render_option()
     opt.background_color = np.asarray([1, 1, 1])  # Dark grey background color
 
-    # Configure the camera's intrinsic and extrinsic parameters
-    # (assuming you have predefined these parameters)
-    fx = fy = 640 / (2 * np.tan(np.deg2rad(60 / 2)))
-    cx = 640 / 2
-    cy = 480 / 2
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(640, 480, fx, fy, cx, cy)
-    intrinsic.intrinsic_matrix = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-    camera_params = o3d.camera.PinholeCameraParameters()
-    camera_params.intrinsic = intrinsic
-    camera_params.extrinsic = np.array(
-        [
-            [0, 0, 0, 0],
-            [0, 0, 0, 0],
-            [0, 0, 0, 0],
-            [0, 0, 0, 1.0],
-        ]
-    )
 
    
-    # Apply the camera parameters to the visualizer
-    view_control = visualizer.get_view_control()
-    # view_control.convert_from_pinhole_camera_parameters(camera_params)
-    # visualizer.get_view_control().set_up(camera_params)
-    # visualizer.setup_camera(camera_params.intrinsic, camera_params.extrinsic)
-
-    # To set a default view point, you could also use the look_at method
-    # eye = (0, 0, -1)  # Camera position
-    # center = (0, 0, 0)  # Look at point
-    # up = (0, 1, 0)  # Up vector
-    # visualizer.look_at(eye, center, up)
+    
+   
 
     add_gizmo(visualizer)
     add_wireframes(visualizer)
+    
+    # view_control = visualizer.get_view_control()
+    # camera_params = view_control.convert_to_pinhole_camera_parameters()
+    # Configure the camera's intrinsic and extrinsic parameters
+    # (assuming you have predefined these parameters)
+    # width = 1920    
+    # height = 1080
+    # fx = fy = width / (2 * np.tan(np.deg2rad(60 / 2)))
+    # cx = width / 2
+    # cy = height / 2
+    # intrinsic = o3d.camera.PinholeCameraIntrinsic(width, height, fx, fy, cx, cy)
+    # # intrinsic.intrinsic_matrix = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
+    # # camera_params = o3d.camera.PinholeCameraParameters()
+    # camera_params.intrinsic = intrinsic
+    # camera_params.extrinsic = np.array(
+    #     [
+    #         [1, 0, 0, 5],
+    #         [0, 1, 0, 5],
+    #         [0, 0, 1, 5],
+    #         [0, 0, 0, 1],
+    #     ]
+    # )
+    # # Apply the camera parameters to the visualizer
+    # view_control.convert_from_pinhole_camera_parameters(camera_params)
+    # visualizer.update_renderer()
 
+    
+    # To set a default view point, you could also use the look_at method
+    # Define the camera view
+    eye = np.array([5, 5, 10])  # Camera position (x, y, z)
+    center = np.array([0, 0, 0])  # Look at point
+    up = np.array([0, 1, 0])  # Up vector
+
+    # Set the view control parameters
+    view_control = visualizer.get_view_control()
+    view_control.set_lookat(center)
+    view_control.set_front(eye - center)  # The front vector is the opposite of the view direction
+    view_control.set_up(up)
+    view_control.set_zoom(0.5)  # Adjust this value for the desired zoom level
+    # view_control.translate(5,10,2)
+    # view_control.change_field_of_view(0.20)
     head_mesh = o3d.io.read_triangle_mesh(templateMeshPath)
     vertices = np.asarray(head_mesh.vertices)
     scalePoints(vertices, 3827, 3619, 3)
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
 
     head_mesh.compute_vertex_normals()
-    visualizer.add_geometry(head_mesh)
+    visualizer.add_geometry(head_mesh, reset_bounding_box=False)
 
 
 # Function to update the view so that the head is fully visible

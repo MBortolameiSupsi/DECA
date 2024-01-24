@@ -16,7 +16,6 @@
 from asyncio.windows_events import NULL
 import os, sys
 from re import S
-from turtle import st
 import cv2
 import numpy as np
 from time import time
@@ -35,7 +34,6 @@ import open3d as o3d
 # import threading
 # import queue
 # import keyboard
-
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -61,11 +59,10 @@ translation_vector = None
 cameraFrame = None
 script_dir = os.path.dirname(os.path.abspath(__file__))
 face_detector = detectors.FAN()
-r180x = np.array([[1,  0,  0],
-                    [0, -1,  0],
-                    [0,  0, -1]])
+r180x = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
 # A shared variable or queue to communicate between threads
 # key_queue = queue.Queue()
+
 
 def main(args):
     global global_args, landmarks3D, vertices, landmarks2Dfullres, cameraFrame, rotation_vector, translation_vector
@@ -184,11 +181,9 @@ def main(args):
         print(
             f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
         )
-        
+
     # Don't forget to remove the hooks when you're done
     # keyboard.unhook_all()
-
-
 
 
 def scalePoints(
@@ -223,7 +218,7 @@ def draw_points(i, image_tensor, landmarks2D, imageData, args):
 
 def visualize():
     global cameraFrame
-    
+
     rotation_matrix = cv2.Rodrigues(rotation_vector)
     vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
     vertices_rotated = np.dot(vertices_rotated, r180x)
@@ -232,8 +227,8 @@ def visualize():
     vertices_rotated_translated = vertices_rotated + translation_vector.T
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
     # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    # head_mesh.compute_vertex_normals()  # If normals are not set, call this
+    # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
+    head_mesh.compute_vertex_normals()  # If normals are not set, call this
     visualizer.update_geometry(head_mesh)
 
     visualizer.poll_events()
@@ -244,16 +239,31 @@ def visualize():
 
 
 def save_obj_with_landmarks3d():
-    relative_path = os.path.join(script_dir,"..", "TestSamples", "camera_feed", "fromCameraFeed_mesh_expression.ply")
+    relative_path = os.path.join(
+        script_dir,
+        "..",
+        "TestSamples",
+        "camera_feed",
+        "fromCameraFeed_mesh_expression.ply",
+    )
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
     o3d.io.write_triangle_mesh(
         relative_path,
         head_mesh,
     )
+
+
 def save_img_with_landmarks2d():
-    relative_path = os.path.join(script_dir,"..", "TestSamples", "camera_feed", "fromCameraFeed_img_with_landmarks2d.png")
+    relative_path = os.path.join(
+        script_dir,
+        "..",
+        "TestSamples",
+        "camera_feed",
+        "fromCameraFeed_img_with_landmarks2d.png",
+    )
     frame_with_landmarks = draw_points(cameraFrame, landmarks2Dfullres)
-    cv2.imwrite(relative_path, frame_with_landmarks)   
+    cv2.imwrite(relative_path, frame_with_landmarks)
+
 
 # def draw_points(image, landmarks2D, imageData):
 def draw_points(image, landmarks2D):
@@ -269,15 +279,21 @@ def draw_points(image, landmarks2D):
 
     return image
 
-def scalePoints(points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None):
-    if(fromPointIndex is not None and toPointIndex is not None):
-         eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
-         scalingFactor = desiredSize/eyeDistance # 3 cm between real life corresponing points (eyes inner corners)
-         points *= scalingFactor
-    elif (desiredScalingFactor is not None):
+
+def scalePoints(
+    points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None
+):
+    if fromPointIndex is not None and toPointIndex is not None:
+        eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
+        scalingFactor = (
+            desiredSize / eyeDistance
+        )  # 3 cm between real life corresponing points (eyes inner corners)
+        points *= scalingFactor
+    elif desiredScalingFactor is not None:
         points *= desiredScalingFactor
         scalingFactor = desiredScalingFactor
     return scalingFactor
+
 
 def start_visualizer():
     global visualizer, global_args, head_mesh
@@ -286,123 +302,95 @@ def start_visualizer():
     visualizer.create_window("Open3D - 3D Visualizer", 1024, 768)
 
     opt = visualizer.get_render_option()
-    opt.background_color = np.asarray([1, 1, 1])  # Dark grey background color
+    opt.background_color = np.asarray([0.8, 0.8, 0.8])  # Dark grey background color
 
-    # Configure the camera's intrinsic and extrinsic parameters
-    # (assuming you have predefined these parameters)
-    camera_params = o3d.camera.PinholeCameraParameters()
-    fx = fy = 640 / (2 * np.tan(np.deg2rad(60 / 2)))
-    cx = 640 / 2
-    cy = 480 / 2
-    camera_params.intrinsic.set_intrinsics(640, 480, fx, fy, cx, cy)
-    # Set extrinsic parameters (the 4x4 extrinsic matrix)
-    camera_params.extrinsic = np.array([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 100],
-        [0, 0, 0, 1]
-    ])
-    # Apply the camera parameters to the visualizer
-    view_control = visualizer.get_view_control()
-    view_control.convert_from_pinhole_camera_parameters(camera_params)
-    # vis.get_view_control().set_up(camera_parameters)
-    # vis.setup_camera(camera_params.intrinsic, camera_params.extrinsic)
-
-    # To set a default view point, you could also use the look_at method
-    # eye = (0, 0, -1)  # Camera position
-    # center = (0, 0, 0)  # Look at point
-    # up = (0, 1, 0)  # Up vector
-    # visualizer.look_at(eye, center, up)
-
-    add_gizmo(visualizer)
     add_wireframes(visualizer)
 
+    # To set a default view point, you could also use the look_at method
+    # Define the camera view
+    eye = np.array([0, 50, 500])  # Camera position (x, y, z)
+    center = np.array([0, 0, 0])  # Look at point
+    up = np.array([0, 1, 0])  # Up vector
 
+    view_control = visualizer.get_view_control()
+    view_control.set_constant_z_far(10000)
+    view_control.set_constant_z_near(0.1)
+    view_control.set_lookat(center)
+    view_control.set_front(
+        eye - center
+    )  # The front vector is the opposite of the view direction
+    view_control.set_up(up)
+    # view_control.set_zoom(10)  # Adjust this value for the desired zoom level
+    # view_control.translate(5,10,2)
+    # view_control.change_field_of_view(0.20)
 
-
-    
     head_mesh = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
     vertices = np.asarray(head_mesh.vertices)
     scalePoints(vertices, 3827, 3619, 3)
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
 
     head_mesh.compute_vertex_normals()
-    visualizer.add_geometry(head_mesh)
+    visualizer.add_geometry(head_mesh, reset_bounding_box=False)
 
-    visualizer.register_key_callback(ord('F'), focus_camera_on_head)
-    visualizer.register_key_callback(ord('Q'), on_press_q)
-    visualizer.register_key_callback(ord('P'), on_press_p)
+    visualizer.register_key_callback(ord("Q"), on_press_q)
+    visualizer.register_key_callback(ord("P"), on_press_p)
 
-    # visualizer.add_geometry(coordinate_frame)
-
-    visualizer.reset_view_point(True)
+    # visualizer.reset_view_point(True)
     # Run the visualization
-    # visualizer.run()
+    # visualizer.run(
 
-# Function to update the view so that the head is fully visible
-def focus_camera_on_head(vis):
-    print("FOCUS")
-     # Assuming 'head' is your head mesh object and 'bbox' is its axis-aligned bounding box
-    # (You would replace the following line with the actual head mesh)
-    bbox = head_mesh.get_oriented_bounding_box()
-
-    # Compute the center of the head mesh and the extent to adjust the view
-    center = bbox.get_center()
-    extent = np.asarray(bbox.extent)
-
-    # Get the view control and associated parameters
-    view_control = vis.get_view_control()
-    cam_params = view_control.convert_to_pinhole_camera_parameters()
-
-    # Distance is based on the extent of the bounding box
-    # Adjust 'distance_factor' as needed to ensure the head is fully visible
-    distance_factor = max(extent) * 2
-    distance = [0, 0, distance_factor]
-
-    # Update the camera parameters to focus on the head
-    cam_params.extrinsic = np.linalg.inv(
-        o3d.camera.PinholeCameraParameters.create_look_at(
-            center + distance, center, [0, 1, 0]
-        )
-    )
-
-    # Apply the new camera parameters
-    view_control.convert_from_pinhole_camera_parameters(cam_params)
-
-    return False
 
 # Function to add a visual gizmo (coordinate frame) to the center of the scene
-def add_gizmo(vis):
+def add_gizmo(vis, origin=[0, 0, 0], size=1):
     # Create a coordinate frame (gizmo) at the center of the scene
-    gizmo = o3d.geometry.TriangleMesh.create_coordinate_frame(size=10, origin=[0, 0, 0])
+    gizmo = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=origin)
     vis.add_geometry(gizmo)
-    
+
+
 # Function to add wireframe planes to the scene
 def add_wireframes(vis):
-    # Create wireframe planes to represent the scene
-    # Here is an example of creating a ground plane wireframe
-    # plane_meshXZ = o3d.geometry.TriangleMesh.create_box(width=500.0, height=0.01, depth=500.0)
-    # plane_meshXZ.compute_vertex_normals()
-    # # plane_meshXZ.translate(np.array([0, -0.05, 0]))
-    # plane_meshXZ.translate(np.array([0, -50, 0]))
-    # plane_meshXZ.paint_uniform_color([1, 0, 0])
-    # vis.add_geometry(plane_meshXZ)
 
-    # plane_meshXY = o3d.geometry.TriangleMesh.create_box(width=500.0, height=500.0, depth=0.01)
-    # plane_meshXY.compute_vertex_normals()
-    # # plane_meshXY.translate(np.array([ 0,0, -0.05]))
-    # plane_meshXY.translate(np.array([ 0,0, -50]))
-    # plane_meshXY.paint_uniform_color([0.5, 0.5, 0.5])
-    # vis.add_geometry(plane_meshXY)
+    commonWidth = 100
+    commonHeight = 100
+    commonDepth = 100
+    shortSide = 0.1
+    plane_origin = np.array([-commonWidth / 2, -commonHeight / 2, -commonDepth / 2])
     
-    # plane_meshYZ = o3d.geometry.TriangleMesh.create_box(width=0.01, height=500.0, depth=500.0)
-    # plane_meshYZ.compute_vertex_normals()
-    # # plane_meshYZ.translate(np.array([ -0.05,0, 0]))
-    # plane_meshYZ.translate(np.array([ -50,0, 0]))
-    # plane_meshYZ.paint_uniform_color([0.5, 0.5, 0.5])
-    # vis.add_geometry(plane_meshYZ)
-    
+    add_gizmo(visualizer, [0, 0, 0], size=5)
+    add_gizmo(visualizer, plane_origin, size=50)
+
+    plane_meshXZ = o3d.geometry.TriangleMesh.create_box(
+        width=commonWidth, height=shortSide, depth=commonDepth
+    )
+    plane_meshXZ.compute_vertex_normals()
+    # plane_meshXZ.translate(np.array([0, -0.05, 0]))
+    plane_meshXZ.translate(plane_origin)
+    plane_meshXZ.paint_uniform_color([0.5, 0, 0])
+    # vis.add_geometry(plane_meshXZ, reset_bounding_box=False)
+    vis.add_geometry(plane_meshXZ)
+
+    plane_meshXY = o3d.geometry.TriangleMesh.create_box(
+        width=commonWidth, height=commonHeight, depth=shortSide
+    )
+    plane_meshXY.compute_vertex_normals()
+    # plane_meshXY.translate(np.array([ 0,0, -0.05]))
+    plane_meshXY.translate(plane_origin)
+    plane_meshXY.paint_uniform_color([0, 0.5, 0])
+    # vis.add_geometry(plane_meshXY, reset_bounding_box=False)
+    vis.add_geometry(plane_meshXY)
+
+    plane_meshYZ = o3d.geometry.TriangleMesh.create_box(
+        width=shortSide, height=commonHeight, depth=commonDepth
+    )
+    plane_meshYZ.compute_vertex_normals()
+    # plane_meshYZ.translate(np.array([ -0.05,0, 0]))
+    plane_meshYZ.translate(plane_origin)
+    plane_meshYZ.paint_uniform_color([0, 0, 0.5])
+    # vis.add_geometry(plane_meshYZ, reset_bounding_box=False)
+    vis.add_geometry(plane_meshYZ)
+
     return False
+
 
 def start_webcam():
     global camera, camera_window_name
@@ -430,9 +418,11 @@ def start_webcam():
     desired_height = 400
     cv2.resizeWindow(camera_window_name, desired_width, desired_height)
 
+
 def stop_visualizer():
     global visualizer
     visualizer.destroy_window()
+
 
 def stop_webcam():
     global camera
@@ -440,16 +430,19 @@ def stop_webcam():
     camera.release()
     # cv2.destroyAllWindows()
 
+
 def on_press_q(e):
     print("KEY q")
     stop_visualizer()
     stop_webcam()
     # keyboard.unhook_all()  # Remove all keyboard hooks
 
+
 def on_press_p(e):
     print("KEY p")
     save_obj_with_landmarks3d()
     save_img_with_landmarks2d()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DECA + SolvePnP")
