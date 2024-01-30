@@ -15,7 +15,6 @@
 
 from asyncio.windows_events import NULL
 import os, sys
-from re import S
 import cv2
 import numpy as np
 from time import time
@@ -59,7 +58,7 @@ translation_vector = None
 cameraFrame = None
 script_dir = os.path.dirname(os.path.abspath(__file__))
 face_detector = detectors.FAN()
-r180x = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+tmirror = np.array([[-1], [-1], [-1]])
 # A shared variable or queue to communicate between threads
 # key_queue = queue.Queue()
 
@@ -217,18 +216,24 @@ def draw_points(i, image_tensor, landmarks2D, imageData, args):
 
 
 def visualize():
-    global cameraFrame
+    global cameraFrame, head_mesh
 
-    rotation_matrix = cv2.Rodrigues(rotation_vector)
-    vertices_rotated = np.dot(vertices, rotation_matrix[0].T)
-    vertices_rotated = np.dot(vertices_rotated, r180x)
+    rotation_matrix = cv2.Rodrigues(rotation_vector)[0].T
+    # breakpoint()
 
-    # # Translate original mesh in place where 3D landamrks are
-    vertices_rotated_translated = vertices_rotated + translation_vector.T
+    rotation_matrix[0, :] *= 1  # Invert X-axis
+    rotation_matrix[1, :] *= -1  # Invert Y-axis
+    rotation_matrix[2, :] *= -1  # Invert Z-axis
+  
+    vertices_rotated = np.matmul(vertices, rotation_matrix)
+
+    mirrored_translation = translation_vector * tmirror
+    vertices_rotated_translated = vertices_rotated + mirrored_translation.T
+    
+    
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
-    # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated)
-    # head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
-    head_mesh.compute_vertex_normals()  # If normals are not set, call this
+   
+    head_mesh.compute_vertex_normals()
     visualizer.update_geometry(head_mesh)
 
     visualizer.poll_events()
@@ -239,6 +244,7 @@ def visualize():
 
 
 def save_obj_with_landmarks3d():
+    global head_mesh
     relative_path = os.path.join(
         script_dir,
         "..",
@@ -246,7 +252,7 @@ def save_obj_with_landmarks3d():
         "camera_feed",
         "fromCameraFeed_mesh_expression.ply",
     )
-    head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
+    # head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
     o3d.io.write_triangle_mesh(
         relative_path,
         head_mesh,
@@ -270,7 +276,7 @@ def draw_points(image, landmarks2D):
     # image_numpy = (image.permute(1, 2, 0).cpu().detach().numpy() * 255).astype(np.uint8)
     for point in landmarks2D:
         x, y = int(round(point[0])), int(round(point[1]))
-        cv2.circle(image, (x, y), radius=5, color=(0, 0, 255), thickness=-1)
+        cv2.circle(image, (x, y), radius=2, color=(0, 0, 255), thickness=-1)
 
     # bbox = imageData['bbox']
     # left, top, right, bottom = bbox
@@ -306,9 +312,10 @@ def start_visualizer():
 
     add_wireframes(visualizer)
 
-    # To set a default view point, you could also use the look_at method
+    # To set a default view
+    #  point, you could also use the look_at method
     # Define the camera view
-    eye = np.array([0, 50, 500])  # Camera position (x, y, z)
+    eye = np.array([0, 0, 5])  # Camera position (x, y, z)
     center = np.array([0, 0, 0])  # Look at point
     up = np.array([0, 1, 0])  # Up vector
 
@@ -320,7 +327,7 @@ def start_visualizer():
         eye - center
     )  # The front vector is the opposite of the view direction
     view_control.set_up(up)
-    # view_control.set_zoom(10)  # Adjust this value for the desired zoom level
+    view_control.set_zoom(0.3)  # Adjust this value for the desired zoom level
     # view_control.translate(5,10,2)
     # view_control.change_field_of_view(0.20)
 
@@ -354,7 +361,7 @@ def add_wireframes(vis):
     commonHeight = 100
     commonDepth = 100
     shortSide = 0.1
-    plane_origin = np.array([-commonWidth / 2, -commonHeight / 2, -commonDepth / 2])
+    plane_origin = np.array([-commonWidth/2, -commonHeight/2, -commonDepth])
     
     add_gizmo(visualizer, [0, 0, 0], size=5)
     add_gizmo(visualizer, plane_origin, size=50)
@@ -397,8 +404,8 @@ def start_webcam():
     # Capture video from the first camera device
     camera = cv2.VideoCapture(0)
     # Set the desired resolution
-    resolution_width = 1920
-    resolution_height = 1080
+    resolution_width = 640
+    resolution_height = 360
     # resolution_width = 480
     # resolution_height = 270
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution_width)
@@ -456,7 +463,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--calibrationData",
-        default="Python Camera Calibration/calibration_data_webcam_side.npz",
+        default="Python Camera Calibration/calibration_data_webcam_side_640_2.npz",
         type=str,
         help="calibration data with camera matrix and distortion coefficients as result of manual calibration",
     )
