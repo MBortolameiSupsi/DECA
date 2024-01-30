@@ -41,11 +41,21 @@ imageToUndistort = '/img (14).jpg'
 calibrationResultImage = 'calibresult_iphone2.png'
 calibrationData = 'calibration_data_iphone_back_2'
 
-# Use this, since it's last
 imagesFolder = './images_webcam_side'
 imageToUndistort = '/img (6).jpg'
 calibrationResultImage = 'calibresult_webcam_side.png'
 calibrationData = 'calibration_data_webcam_side'
+
+# Use this, since it's last
+imagesFolder = './images_webcam_side_640'
+imageToUndistort = '/img (6).jpg'
+calibrationResultImage = 'calibresult_webcam_side_640.png'
+calibrationData = 'calibration_data_webcam_side_640'
+
+imagesFolder = './images_webcam_side_640_2'
+imageToUndistort = '/img (6)_640x360.jpg'
+calibrationResultImage = 'calibresult_webcam_side_640_2.png'
+calibrationData = 'calibration_data_webcam_side_640_2'
 
 objp = np.zeros((rows*columns, 3), np.float32)
 objp[:, :2] = np.mgrid[0:rows, 0:columns].T.reshape(-1, 2)
