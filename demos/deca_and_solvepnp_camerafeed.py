@@ -303,20 +303,16 @@ def scalePoints(
 
 def start_visualizer():
     global visualizer, global_args, head_mesh
-    # visualizer = o3d.visualization.Visualizer()
     visualizer = o3d.visualization.VisualizerWithKeyCallback()
     visualizer.create_window("Open3D - 3D Visualizer", 1024, 768)
 
     opt = visualizer.get_render_option()
-    opt.background_color = np.asarray([0.8, 0.8, 0.8])  # Dark grey background color
+    opt.background_color = np.asarray([0.8, 0.8, 0.8]) 
 
     add_wireframes(visualizer)
 
-    # To set a default view
-    #  point, you could also use the look_at method
-    # Define the camera view
-    eye = np.array([0, 0, 5])  # Camera position (x, y, z)
-    center = np.array([0, 0, 0])  # Look at point
+    eye = np.array([0, 0, 0])  # Camera position (x, y, z)
+    center = np.array([0, 0, -100])  # Look at point
     up = np.array([0, 1, 0])  # Up vector
 
     view_control = visualizer.get_view_control()
@@ -327,7 +323,7 @@ def start_visualizer():
         eye - center
     )  # The front vector is the opposite of the view direction
     view_control.set_up(up)
-    view_control.set_zoom(0.3)  # Adjust this value for the desired zoom level
+    view_control.set_zoom(0.5)  # Adjust this value for the desired zoom level
     # view_control.translate(5,10,2)
     # view_control.change_field_of_view(0.20)
 
@@ -364,7 +360,7 @@ def add_wireframes(vis):
     plane_origin = np.array([-commonWidth/2, -commonHeight/2, -commonDepth])
     
     add_gizmo(visualizer, [0, 0, 0], size=5)
-    add_gizmo(visualizer, plane_origin, size=50)
+    # add_gizmo(visualizer, plane_origin, size=50)
 
     plane_meshXZ = o3d.geometry.TriangleMesh.create_box(
         width=commonWidth, height=shortSide, depth=commonDepth
