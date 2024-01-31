@@ -1,0 +1,10 @@
+head_mesh: f".\head_template_centered_scaled.ply"
+source:
+    type: "camera" # 'camera' or 'folder'
+    camera_index: 0
+    folder: ""
+
+camera:
+    calibration_data: f".\calibration_data_webcam_side_640_2.npz"
+    capture_resolution_width: 640
+    capture_resolution_height: 360

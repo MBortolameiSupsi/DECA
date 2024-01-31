@@ -18,17 +18,17 @@ import os, sys
 import cv2
 import numpy as np
 from time import time
-from scipy.io import savemat
 import argparse
-from tqdm import tqdm
 import torch
 import math
 
 import time
 import open3d as o3d
 
-import trimesh
 import open3d as o3d
+
+from datetime import datetime
+import yaml
 
 # import threading
 # import queue
@@ -45,6 +45,13 @@ from decalib.utils.tensor_cropper import transform_points
 
 
 # GLOBAL VARIABLES
+camera_matrix = None
+camera_dist_coeffs = None
+camera_index = None
+image_folder = None
+source = None
+output_folder = None
+
 visualizer = None
 camera = None
 global_args = None
@@ -59,6 +66,7 @@ cameraFrame = None
 script_dir = os.path.dirname(os.path.abspath(__file__))
 face_detector = detectors.FAN()
 tmirror = np.array([[-1], [-1], [-1]])
+desired_eye_distance = None
 # A shared variable or queue to communicate between threads
 # key_queue = queue.Queue()
 
@@ -66,22 +74,15 @@ tmirror = np.array([[-1], [-1], [-1]])
 def main(args):
     global global_args, landmarks3D, vertices, landmarks2Dfullres, cameraFrame, rotation_vector, translation_vector
     global_args = args
-
+    load_config()
     # Hook the 'q' and 's' keys
     # keyboard.on_press_key('q', on_press_q)
     # keyboard.on_press_key('p', on_press_p)
 
-    # Load camera matrix
-    calibration_data = args.calibrationData
-    data = np.load(calibration_data)
-    camera_matrix = data["camera_matrix"]
-    dist_coeffs = data["dist_coeffs"]
+   
 
     # Ensure that camera_matrix and dist_coeffs are also float32 and have the correct shapes
-    camera_matrix = np.asarray(camera_matrix, dtype=np.float32)
-    dist_coeffs = np.asarray(dist_coeffs, dtype=np.float32)
-
-    print("camera_matrix", camera_matrix, "\n dist_coeffs", dist_coeffs)
+   
 
     # DECA
 
@@ -146,14 +147,14 @@ def main(args):
         # ---- LANDMARKS ----
 
         landmarks3D = opdict["landmarks3d_world"][0].cpu().numpy()[:, :3]
-        scaling_factor = scalePoints(landmarks3D, 39, 42, 3)
+        scaling_factor = scalePoints(landmarks3D, 39, 42, desired_eye_distance)
         landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
 
         landmarks2Dfullres = opdict["landmarks2d_full_res"][0]
         landmarks2Dfullres = np.ascontiguousarray(landmarks2Dfullres, dtype=np.float32)
 
         vertices = opdict["verts"][0].cpu().numpy()[:, :3]
-        scalePoints(vertices, None, None, None, scaling_factor)
+        scalePoints(vertices, desiredScalingFactor=scaling_factor)
 
         # ---- SOLVEPNP ----
         success, rotation_vector, translation_vector = cv2.solvePnP(
@@ -161,7 +162,7 @@ def main(args):
             # landmarks2D,
             landmarks2Dfullres,
             camera_matrix,
-            dist_coeffs,
+            camera_dist_coeffs,
         )
         if success:
             distance = np.linalg.norm(translation_vector)
@@ -183,21 +184,6 @@ def main(args):
 
     # Don't forget to remove the hooks when you're done
     # keyboard.unhook_all()
-
-
-def scalePoints(
-    points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None
-):
-    if fromPointIndex is not None and toPointIndex is not None:
-        eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
-        scalingFactor = (
-            desiredSize / eyeDistance
-        )  # 3 cm between real life corresponing points (eyes inner corners)
-        points *= scalingFactor
-    elif desiredScalingFactor is not None:
-        points *= desiredScalingFactor
-        scalingFactor = desiredScalingFactor
-    return scalingFactor
 
 
 def draw_points(i, image_tensor, landmarks2D, imageData, args):
@@ -224,15 +210,14 @@ def visualize():
     rotation_matrix[0, :] *= 1  # Invert X-axis
     rotation_matrix[1, :] *= -1  # Invert Y-axis
     rotation_matrix[2, :] *= -1  # Invert Z-axis
-  
+
     vertices_rotated = np.matmul(vertices, rotation_matrix)
 
     mirrored_translation = translation_vector * tmirror
     vertices_rotated_translated = vertices_rotated + mirrored_translation.T
-    
-    
+
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
-   
+
     head_mesh.compute_vertex_normals()
     visualizer.update_geometry(head_mesh)
 
@@ -245,12 +230,13 @@ def visualize():
 
 def save_obj_with_landmarks3d():
     global head_mesh
+    now = datetime.now()
+    date_time = now.strftime("%Y%m%d_%H%M%S")
     relative_path = os.path.join(
         script_dir,
-        "..",
-        "TestSamples",
-        "camera_feed",
-        "fromCameraFeed_mesh_expression.ply",
+        ".",
+        "results",
+        f"mesh_expression_{date_time}.ply",
     )
     # head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
     o3d.io.write_triangle_mesh(
@@ -260,40 +246,41 @@ def save_obj_with_landmarks3d():
 
 
 def save_img_with_landmarks2d():
+    now = datetime.now()
+    date_time = now.strftime("%Y%m%d_%H%M%S")
     relative_path = os.path.join(
         script_dir,
-        "..",
-        "TestSamples",
-        "camera_feed",
-        "fromCameraFeed_img_with_landmarks2d.png",
+        ".",
+        "results",
+        f"image_landmarks2d_{date_time}.png",
     )
     frame_with_landmarks = draw_points(cameraFrame, landmarks2Dfullres)
     cv2.imwrite(relative_path, frame_with_landmarks)
 
 
-# def draw_points(image, landmarks2D, imageData):
 def draw_points(image, landmarks2D):
-    # image_numpy = (image.permute(1, 2, 0).cpu().detach().numpy() * 255).astype(np.uint8)
     for point in landmarks2D:
         x, y = int(round(point[0])), int(round(point[1]))
         cv2.circle(image, (x, y), radius=2, color=(0, 0, 255), thickness=-1)
-
-    # bbox = imageData['bbox']
-    # left, top, right, bottom = bbox
-    # cv2.rectangle(image_numpy, (int(left), int(top)), (int(right), int(bottom)), (0, 255, 0), 2)
-    # breakpoint()
-
     return image
 
 
+def getDesiredEyeDistance(vertices, fromPointIndex, toPointIndex):
+    # this will be the desired size to which scale the landmarks
+    return math.dist(vertices[fromPointIndex], vertices[toPointIndex])
+
+
 def scalePoints(
-    points, fromPointIndex, toPointIndex, desiredSize, desiredScalingFactor=None
+    points,
+    fromPointIndex=None,
+    toPointIndex=None,
+    desiredDistance=None,
+    desiredScalingFactor=None,
 ):
     if fromPointIndex is not None and toPointIndex is not None:
-        eyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
-        scalingFactor = (
-            desiredSize / eyeDistance
-        )  # 3 cm between real life corresponing points (eyes inner corners)
+        currentEyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
+        scalingFactor = desiredDistance / currentEyeDistance
+        # print(f"SCALING - initial distance was {currentEyeDistance} - desired is {desiredDistance} : scalingFactor {scalingFactor}")
         points *= scalingFactor
     elif desiredScalingFactor is not None:
         points *= desiredScalingFactor
@@ -302,12 +289,12 @@ def scalePoints(
 
 
 def start_visualizer():
-    global visualizer, global_args, head_mesh
+    global visualizer, global_args, head_mesh, desired_eye_distance
     visualizer = o3d.visualization.VisualizerWithKeyCallback()
     visualizer.create_window("Open3D - 3D Visualizer", 1024, 768)
 
     opt = visualizer.get_render_option()
-    opt.background_color = np.asarray([0.8, 0.8, 0.8]) 
+    opt.background_color = np.asarray([0.8, 0.8, 0.8])
 
     add_wireframes(visualizer)
 
@@ -323,42 +310,36 @@ def start_visualizer():
         eye - center
     )  # The front vector is the opposite of the view direction
     view_control.set_up(up)
-    view_control.set_zoom(0.5)  # Adjust this value for the desired zoom level
+    view_control.set_zoom(0.5)
     # view_control.translate(5,10,2)
     # view_control.change_field_of_view(0.20)
 
     head_mesh = o3d.io.read_triangle_mesh(global_args.templateMeshPath)
     vertices = np.asarray(head_mesh.vertices)
-    scalePoints(vertices, 3827, 3619, 3)
-    head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
-
+    # head mesh is already perfect scale. we save eye distance
+    # to scale landmarks later on
+    desired_eye_distance = getDesiredEyeDistance(vertices, 3827, 3619)
+    print(f"Desired Eye distance is {desired_eye_distance}")
     head_mesh.compute_vertex_normals()
     visualizer.add_geometry(head_mesh, reset_bounding_box=False)
 
     visualizer.register_key_callback(ord("Q"), on_press_q)
     visualizer.register_key_callback(ord("P"), on_press_p)
 
-    # visualizer.reset_view_point(True)
-    # Run the visualization
-    # visualizer.run(
 
-
-# Function to add a visual gizmo (coordinate frame) to the center of the scene
 def add_gizmo(vis, origin=[0, 0, 0], size=1):
     # Create a coordinate frame (gizmo) at the center of the scene
     gizmo = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=origin)
     vis.add_geometry(gizmo)
 
 
-# Function to add wireframe planes to the scene
 def add_wireframes(vis):
-
     commonWidth = 100
     commonHeight = 100
     commonDepth = 100
     shortSide = 0.1
-    plane_origin = np.array([-commonWidth/2, -commonHeight/2, -commonDepth])
-    
+    plane_origin = np.array([-commonWidth / 2, -commonHeight / 2, -commonDepth])
+
     add_gizmo(visualizer, [0, 0, 0], size=5)
     # add_gizmo(visualizer, plane_origin, size=50)
 
@@ -397,24 +378,20 @@ def add_wireframes(vis):
 
 def start_webcam():
     global camera, camera_window_name
-    # Capture video from the first camera device
+
     camera = cv2.VideoCapture(0)
-    # Set the desired resolution
     resolution_width = 640
     resolution_height = 360
-    # resolution_width = 480
-    # resolution_height = 270
+
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution_width)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution_height)
-    # Check if the video stream is opened successfully
+
     if not camera.isOpened():
         print("Error: Could not open video stream.")
         exit()
 
-    # Set the window name
     camera_window_name = "Webcam Augmented Feed"
 
-    # Create a window to display the frames
     cv2.namedWindow(camera_window_name, cv2.WINDOW_NORMAL)
     # Set the desired window size
     desired_width = 400
@@ -429,16 +406,13 @@ def stop_visualizer():
 
 def stop_webcam():
     global camera
-    # Release the video capture object and close all windows
     camera.release()
-    # cv2.destroyAllWindows()
 
 
 def on_press_q(e):
     print("KEY q")
     stop_visualizer()
     stop_webcam()
-    # keyboard.unhook_all()  # Remove all keyboard hooks
 
 
 def on_press_p(e):
@@ -446,22 +420,55 @@ def on_press_p(e):
     save_obj_with_landmarks3d()
     save_img_with_landmarks2d()
 
+def load_config():
+    global camera_matrix, camera_dist_coeffs
+    global source, camera_index, image_folder
+    global output_folder
+    with open(global_args.config, 'r') as stream:
+        try:
+            config = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+            return
+        
+    camera = config['camera']
+    camera_width = camera['capture_resolution_width']
+    camera_height = camera['capture_resolution_height']
+    camera_calibration_data = camera['camera_calibration_data']
+    if camera_calibration_data is not None or camera_calibration_data is not "":
+        camera_data = np.load(camera_calibration_data)
+        if camera_data is not None:
+            camera_matrix = np.asarray( camera_data["camera_matrix"], dtype=np.float32)
+            camera_dist_coeffs = np.asarray(camera_data["dist_coeffs"], dtype=np.float32)
+        else:
+            print("ERROR fetching camera data")
+            return
+    else:
+        print("ERROR no camera data specified")
+        return
+    print("\n LOADED camera_matrix", camera_matrix, 
+          "\n dist_coeffs", camera_dist_coeffs,
+          f"\n w:{camera_width} h:{camera_height}")
+    
+    source = config['source']
+    if source['type'] == "camera":
+        camera_index = source['camera_index']
+    elif source['type'] == "folder":
+        image_folder = source['folder']
+
+    output = config['output']
+    output_folder = output['folder']
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DECA + SolvePnP")
 
     # Additional Arguments not in original lib
     parser.add_argument(
-        "--templateMeshPath",
-        default="data\head_template_centered.ply",
+        "--config",
+        default="./config.yaml",
         type=str,
-        help="path to the ply template mesh for visualisation",
+        help="path to the config file",
     )
-    parser.add_argument(
-        "--calibrationData",
-        default="Python Camera Calibration/calibration_data_webcam_side_640_2.npz",
-        type=str,
-        help="calibration data with camera matrix and distortion coefficients as result of manual calibration",
-    )
-
+    
     main(parser.parse_args())
