@@ -1,0 +1,51 @@
+FULL RES SLOW  False deca original  False
+  0%|                                                                                 | 0/1 [00:00<?, ?it/s]Decoding
+torch
+full_res_landmarks2D points_scale self.image_size 224
+extract_full_res_landmarks image_shape (1080, 1920)  [0] 1080 [1] 1920
+extract_full_res_landmarks IN are torch.Size([1, 68, 2]) tensor([[
+         [-0.1873, -0.0361],
+         [-0.1837,  0.0449],
+         [-0.1771,  0.1175],
+       
+
+ extract_full_res_landmarks landmarks are  (1, 68, 2) [[
+  [ 780.23755  520.519  ]
+  [ 783.64825  564.25745]
+  [ 789.94653  603.4695 ]
+ 
+return_vis and render_orig ELSE
+rendering
+vis_lmk
+
+Image 0: eye distance 0.3787705619616857 , scaling factor 7.920362090608993 - AFTER SCALING eye_distance2 3.0000000175536004
+
+BEFORE PNP - landmarks2Dfullres  [
+ [ 780.23816  520.5189 ]
+ [ 783.6488   564.25745]
+ [ 789.9471   603.46936]
+
+
+ landmarks3D [
+ [-5.9183974e+00 -3.8722243e+00  1.1184561e+00]
+ [-5.8375325e+00 -2.3182726e+00  1.5002563e+00]
+ [-5.6594286e+00 -5.6938159e-01  1.8090572e+00]
+
+AFTER PNP - translation_vector  (3, 1) [
+ [-2.37930929]
+ [ 2.75108746]
+ [46.08882535]]
+
+
+100%|?????????????????????????????????????????????????????????????????????????| 1/1 [00:10<00:00, 10.65s/it]
+Image  0  - Encode time - 0.20403242111206055
+Image  0  - Decode time - 0.26752233505249023
+Image  0  - Landmark time - 0.0
+Image  0  - Solvepnp time - 0.0
+Image  0  - Distance is - 46.23194491637393
+Total encoding time for all images - 0.20403242111206055
+Total decoding time for all images - 0.26752233505249023
+Average encoding time per image - 0.20403242111206055
+Average decoding time per image - 0.26752233505249023
+Total Landmark time for all images - 0.0
+Total Solvepnp time for all images - 0.0

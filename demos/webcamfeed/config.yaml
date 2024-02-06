@@ -1,10 +1,24 @@
-head_mesh: f".\head_template_centered_scaled.ply"
+head_mesh: "./head_template_centered_scaled.ply"
 source:
-    type: "camera" # 'camera' or 'folder'
+    #type: "camera" # 'camera' or 'folder'
+    type: "folder" # 'camera' or 'folder'
     camera_index: 0
-    folder: ""
+    folder: "./examples_webcam_640_2"
 
 camera:
-    calibration_data: f".\calibration_data_webcam_side_640_2.npz"
+    calibration_data: "./calibration_data_webcam_side_640_2.npz"
     capture_resolution_width: 640
     capture_resolution_height: 360
+
+visualize:
+    visualizer2d: True
+    visualizer2d_width: 400
+    visualizer2d_height: 400
+    visualizer3d: True
+
+output:
+    folder: "./results"    
+    save_vertices_rotated_and_translated: False
+    save_solvepnp_rototranslation: True
+    save_mesh_expression_with_landmarks3d: True
+    save_image_with_landmarks2d: True
