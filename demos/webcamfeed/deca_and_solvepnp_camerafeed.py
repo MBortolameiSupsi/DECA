@@ -61,25 +61,28 @@ save_solvepnp_rototranslation = None
 save_mesh_expression_with_landmarks3d = None
 save_image_with_landmarks2d = None
 
-visualizer3d = None
-camera = None
 global_args = None
 head_mesh = None
+input_image = None
+deca_and_solvepnp_time = None
+
+visualizer3d = None
+camera = None
 camera_window_name = None
+
 landmarks3D = None
 vertices = None
 landmarks2Dfullres = None
 rotation_vector = None
 translation_vector = None
-rototranslation_matrix = None
+transform_matrix = np.eye(4)
+distance = None
 vertices_rotated_translated = None
-input_image = None
-script_dir = os.path.dirname(os.path.abspath(__file__))
-face_detector = detectors.FAN()
-tmirror = np.array([[-1], [-1], [-1]])
 desired_eye_distance = None
-# A shared variable or queue to communicate between threads
-# key_queue = queue.Queue()
+tmirror = np.array([[-1], [-1], [-1]])
+face_detector = detectors.FAN()
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
 deca = None
 device = "cuda"
@@ -87,7 +90,8 @@ device = "cuda"
 
 def main(args):
     global global_args, deca
-    global input_image
+    global input_image, transform_matrix, distance
+    global deca_and_solvepnp_time
     global_args = args
     load_config()
     # DECA setup
@@ -148,6 +152,9 @@ def main(args):
 
         if success:
             start_visualize_time = time.time()
+            distance = np.linalg.norm(translation_vector)
+            transform_matrix = compose_transform_matrix()
+            
             if visualizer3d:
                 visualize3d()
             if visualizer2d:
@@ -155,16 +162,17 @@ def main(args):
             end_visualize_time = time.time()
             visualize_time = end_visualize_time - start_visualize_time
 
-            if save_mesh_expression_with_landmarks3d :
+
+            if save_mesh_expression_with_landmarks3d and source["type"] == "folder":
                 save_img_2d()
-            if save_image_with_landmarks2d:
+            if save_image_with_landmarks2d and source["type"] == "folder":
                 save_mesh_3d()
             if save_solvepnp_rototranslation:
                 save_solvepnp_transform()
-            distance = np.linalg.norm(translation_vector)
             print(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
+            print(f"transform matrix {transform_matrix}")
     
     # Don't forget to remove the hooks when you're done
     # keyboard.unhook_all()
@@ -245,8 +253,35 @@ def visualize3d():
 def visualize2d():
     global input_image
     input_image = draw_points(input_image, landmarks2Dfullres)
+    text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
+    draw_text(input_image, text)
     cv2.imshow(camera_window_name, input_image)
 
+def draw_text(input_image, text):
+    # Define the font for the text
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    # Define the starting position for the text (top right corner)
+    base_x = input_image.shape[1] - 280
+    base_y = 40  # You may need to adjust these values
+    # Define the font scale and color
+    font_scale = 1
+    font_color = (0, 255, 0)  # Green color
+    line_type = 2
+    line_spacing = 30  # Adjust the line spacing based on font size
+
+    # Split the text by '\n' to handle multiple lines
+    lines = text.split('\n')
+    
+    # Draw each line on the image
+    for i, line in enumerate(lines):
+        line_position = (base_x, base_y + i * line_spacing)
+        cv2.putText(input_image, 
+                    line,  # Text string for the current line
+                    line_position, 
+                    font, 
+                    font_scale, 
+                    font_color, 
+                    line_type)
 
 def save_mesh_3d():
     global head_mesh
@@ -277,10 +312,13 @@ def save_img_2d():
     frame_with_landmarks = draw_points(input_image, landmarks2Dfullres)
     cv2.imwrite(relative_path, frame_with_landmarks)
 
-def save_solvepnp_transform():
-    transform_matrix = np.eye(4)
+def compose_transform_matrix():
+    global transform_matrix
     transform_matrix[:3, :3] = cv2.Rodrigues(rotation_vector)[0].T
     transform_matrix[:3, 3] = translation_vector.T
+    return transform_matrix
+
+def save_solvepnp_transform():
     with open(output_folder+f"/solvepnp_transform.txt", 'ab') as file:
         np.savetxt(file, transform_matrix)
 

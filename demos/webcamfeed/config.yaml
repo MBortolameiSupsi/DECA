@@ -1,9 +1,10 @@
 head_mesh: "./head_template_centered_scaled.ply"
 source:
-    #type: "camera" # 'camera' or 'folder'
-    type: "folder" # 'camera' or 'folder'
+    type: "camera" 
+    # type: "folder" 
     camera_index: 0
-    folder: "./examples_webcam_640_2"
+    folder: ""
+    # folder: "./examples_webcam_640_2"
 
 camera:
     calibration_data: "./calibration_data_webcam_side_640_2.npz"
@@ -18,7 +19,10 @@ visualize:
 
 output:
     folder: "./results"    
-    save_vertices_rotated_and_translated: False
     save_solvepnp_rototranslation: True
+    # the following works only in when source type is folder
+    # otherwise it would save a mesh+img for each frame from the webcam
+    # Note: if you press P while focus on the 3D visualizer window, 
+    # you'll save a snapshot of mesh+img
     save_mesh_expression_with_landmarks3d: True
     save_image_with_landmarks2d: True
