@@ -15,13 +15,15 @@
 
 import numpy as np
 import torch
+# import dlib
 
 class FAN(object):
     def __init__(self):
         import face_alignment
-        self.model = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False)
+        self.model = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, face_detector='dlib', device='cuda')
 
     def run(self, image):
+        
         '''
         image: 0-255, uint8, rgb, [h, w, 3]
         return: detected box list
@@ -35,6 +37,35 @@ class FAN(object):
             top = np.min(kpt[:,1]); bottom = np.max(kpt[:,1])
             bbox = [left,top, right, bottom]
             return bbox, 'kpt68'
+        
+class MEDIAPIPE(object):
+    def __init__(self):
+        import mediapipe as mp
+        import cv2
+        mp_face_mesh = mp.solutions.face_mesh
+        self.cv2 = cv2
+        self.model = mp_face_mesh.FaceMesh()
+
+    def run(self, image):
+        out = self.model.process(self.cv2.cvtColor(image, self.cv2.COLOR_BGR2RGB))
+        # out = self.model.get_landmarks(image)
+        if out.multi_face_landmarks is None:
+            return [0], 'kpt68'
+        else:
+            face_landmarks = out.multi_face_landmarks[0]
+            kpt = np.array([(landmark.x, landmark.y) 
+                            for landmark in face_landmarks.landmark])
+            # Convert normalized coordinates to pixel values
+            kpt[:, 0] *= image.shape[1]  # Multiply x by image width
+            kpt[:, 1] *= image.shape[0]  # Multiply y by image height
+            # Compute the bounding box coordinates
+            left = np.min(kpt[:, 0])
+            right = np.max(kpt[:, 0])
+            top = np.min(kpt[:, 1])
+            bottom = np.max(kpt[:, 1])
+            bbox = [left, top, right, bottom]
+            return bbox, 'kpt68'
+        
 
 class MTCNN(object):
     def __init__(self, device = 'cpu'):

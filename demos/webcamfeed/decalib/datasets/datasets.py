@@ -242,21 +242,21 @@ class CameraData(Dataset):
         tensors_time = end_tensors_time - start_tensors_time
         
 
-        # total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
-        # prepareimage_time_percentage = get_percentage(prepareimage_time, total_time)
-        # facedetector_time_percentage = get_percentage(facedetector_time, total_time)
-        # bbox2point_time_percentage = get_percentage(bbox2point_time, total_time)
-        # estimatetransform_time_percentage = get_percentage(estimatetransform_time, total_time)
-        # warp_time_percentage = get_percentage(warp_time, total_time)
-        # tensors_time_percentage = get_percentage(tensors_time, total_time)
-        # print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
-        # print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
-        # print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
-        # print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
-        # print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
-        # print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
-        # print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
-        # print(f"++++++++++++")
+        total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
+        prepareimage_time_percentage = get_percentage(prepareimage_time, total_time)
+        facedetector_time_percentage = get_percentage(facedetector_time, total_time)
+        bbox2point_time_percentage = get_percentage(bbox2point_time, total_time)
+        estimatetransform_time_percentage = get_percentage(estimatetransform_time, total_time)
+        warp_time_percentage = get_percentage(warp_time, total_time)
+        tensors_time_percentage = get_percentage(tensors_time, total_time)
+        print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+        print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+        print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+        print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+        print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+        print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+        print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+        print(f"++++++++++++")
 
         return {'image': image_tensor,
                 'imagename': 'frame',
@@ -267,4 +267,9 @@ class CameraData(Dataset):
                 }
     
 def get_percentage(part,whole):
-    return part/whole * 100
+    try:
+        result = part/whole * 100
+        return result
+    except ZeroDivisionError:
+        return 0
+        

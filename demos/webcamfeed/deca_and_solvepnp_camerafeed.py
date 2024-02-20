@@ -84,7 +84,7 @@ desired_eye_distance = None
 tmirror = np.array([[-1], [-1], [-1]])
 ear_points_2d = None
 
-face_detector = detectors.FAN()
+face_detector = detectors.MEDIAPIPE()
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
