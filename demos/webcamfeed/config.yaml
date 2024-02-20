@@ -13,8 +13,8 @@ camera:
 
 visualize:
     visualizer2d: True
-    visualizer2d_width: 400
-    visualizer2d_height: 400
+    visualizer2d_width: 800
+    visualizer2d_height: 800
     visualizer3d: True
 
 output:
@@ -26,3 +26,4 @@ output:
     # you'll save a snapshot of mesh+img
     save_mesh_expression_with_landmarks3d: True
     save_image_with_landmarks2d: True
+    time_logs: False

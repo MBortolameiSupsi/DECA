@@ -42,7 +42,7 @@ class FLAME(nn.Module):
     """
     def __init__(self, config):
         super(FLAME, self).__init__()
-        print("creating the FLAME Decoder")
+        print(f"creating the FLAME Decoder. Config is {config}")
         with open(config.flame_model_path, 'rb') as f:
             ss = pickle.load(f, encoding='latin1')
             flame_model = Struct(**ss)
@@ -171,8 +171,8 @@ class FLAME(nn.Module):
                                        self.full_lmk_faces_idx.repeat(vertices.shape[0], 1),
                                        self.full_lmk_bary_coords.repeat(vertices.shape[0], 1, 1))
         return landmarks3d
-
-    def forward(self, shape_params=None, expression_params=None, pose_params=None, eye_pose_params=None):
+    
+    def forward_original(self, shape_params=None, expression_params=None, pose_params=None, eye_pose_params=None):
         """
             Input:
                 shape_params: N X number of shape parameters
@@ -182,6 +182,7 @@ class FLAME(nn.Module):
                 vertices: N X V X 3
                 landmarks: N X number of landmarks X 3
         """
+        print("FORWARD ORIGINAL")
         batch_size = shape_params.shape[0]
         if pose_params is None:
             pose_params = self.eye_pose.expand(batch_size, -1)
@@ -223,6 +224,65 @@ class FLAME(nn.Module):
         # o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_vertices.ply', pc_vertices)
 
         return vertices, landmarks2d, landmarks3d
+    
+    def forward(self, shape_params=None, expression_params=None, pose_params_straight=None, pose_params_real=None, eye_pose_params=None):
+        """
+            Input:
+                shape_params: N X number of shape parameters
+                expression_params: N X number of expression parameters
+                pose_params: N X number of pose parameters (6)
+            return:d
+                vertices: N X V X 3
+                landmarks: N X number of landmarks X 3
+        """
+        batch_size = shape_params.shape[0]
+        if pose_params_straight is None:
+            pose_params_straight = self.eye_pose.expand(batch_size, -1)
+        if eye_pose_params is None:
+            eye_pose_params = self.eye_pose.expand(batch_size, -1)
+        betas = torch.cat([shape_params, expression_params], dim=1)
+        
+        full_pose_straight = torch.cat([pose_params_straight[:, :3], self.neck_pose.expand(batch_size, -1), pose_params_straight[:, 3:], eye_pose_params], dim=1)
+        full_pose_real = torch.cat([pose_params_real[:, :3], self.neck_pose.expand(batch_size, -1), pose_params_real[:, 3:], eye_pose_params], dim=1)
+        
+        template_vertices = self.v_template.unsqueeze(0).expand(batch_size, -1, -1)
+
+        vertices_straight, _ = lbs(betas, full_pose_straight, template_vertices,
+                          self.shapedirs, self.posedirs,
+                          self.J_regressor, self.parents,
+                          self.lbs_weights, dtype=self.dtype)        
+        vertices_real, _ = lbs(betas, full_pose_real, template_vertices,
+                          self.shapedirs, self.posedirs,
+                          self.J_regressor, self.parents,
+                          self.lbs_weights, dtype=self.dtype)
+
+        lmk_faces_idx = self.lmk_faces_idx.unsqueeze(dim=0).expand(batch_size, -1)
+        lmk_bary_coords = self.lmk_bary_coords.unsqueeze(dim=0).expand(batch_size, -1, -1)
+        
+        dyn_lmk_faces_idx, dyn_lmk_bary_coords = self._find_dynamic_lmk_idx_and_bcoords(
+            full_pose_straight, self.dynamic_lmk_faces_idx,
+            self.dynamic_lmk_bary_coords,
+            self.neck_kin_chain, dtype=self.dtype)
+        lmk_faces_idx = torch.cat([dyn_lmk_faces_idx, lmk_faces_idx], 1)
+        lmk_bary_coords = torch.cat([dyn_lmk_bary_coords, lmk_bary_coords], 1)
+
+        landmarks2d = vertices2landmarks(vertices_real, self.faces_tensor,
+                                       lmk_faces_idx,
+                                       lmk_bary_coords)
+        bz = vertices_straight.shape[0]
+        landmarks3d = vertices2landmarks(vertices_straight, self.faces_tensor,
+                                       self.full_lmk_faces_idx.repeat(bz, 1),
+                                       self.full_lmk_bary_coords.repeat(bz, 1, 1))
+        
+        #### DEBUG
+        # import open3d as o3d
+        # pc_landmarks = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(landmarks3d.cpu()))))
+        # o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_landmarks.ply', pc_landmarks)
+
+        # pc_vertices = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(np.squeeze(np.asarray(vertices.cpu()))))
+        # o3d.io.write_point_cloud(r'C:\Users\massimo.bortolamei\Documents\DECA\TestSamples\examples_webcam\results\debug_vertices.ply', pc_vertices)
+
+        return vertices_straight, landmarks2d, landmarks3d
 
 class FLAMETex(nn.Module):
     """

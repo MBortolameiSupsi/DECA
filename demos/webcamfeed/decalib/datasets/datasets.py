@@ -24,6 +24,7 @@ from skimage.io import imread, imsave
 from skimage.transform import estimate_transform, warp, resize, rescale
 from glob import glob
 import scipy.io
+import time
 
 from . import detectors
 
@@ -176,6 +177,9 @@ class CameraData(Dataset):
         return old_size, center
 
     def processCameraData(self):
+           
+        start_prepareimage_time = time.time()
+        
         image = np.array(self.image)
         if len(image.shape) == 2:
             image = image[:,:,None].repeat(1,1,3)
@@ -183,7 +187,13 @@ class CameraData(Dataset):
             image = image[:,:,:3]
 
         h, w, _ = image.shape
+        
+        end_prepareimage_time = time.time()
+        prepareimage_time = end_prepareimage_time - start_prepareimage_time
+        
         if self.iscrop:
+            start_facedetector_time = time.time()
+            
             bbox, bbox_type = self.face_detector.run(image)
             if len(bbox) < 4:
                 print('no face detected! run original image')
@@ -191,23 +201,70 @@ class CameraData(Dataset):
             else:
                 left = bbox[0]; right=bbox[2]
                 top = bbox[1]; bottom=bbox[3]
+                
+            end_facedetector_time = time.time()
+            facedetector_time = end_facedetector_time - start_facedetector_time
+            
+            start_bbox2point_time = time.time()
+            
             old_size, center = self.bbox2point(left, right, top, bottom, type=bbox_type)
             size = int(old_size*self.scale)
             src_pts = np.array([[center[0]-size/2, center[1]-size/2], [center[0] - size/2, center[1]+size/2], [center[0]+size/2, center[1]-size/2]])
+            
+            end_bbox2point_time = time.time()
+            bbox2point_time = end_bbox2point_time - start_bbox2point_time
         else:
             src_pts = np.array([[0, 0], [0, h-1], [w-1, 0]])
-        
+            
+        start_estimatetransform_time = time.time()
         DST_PTS = np.array([[0,0], [0,self.resolution_inp - 1], [self.resolution_inp - 1, 0]])
         tform = estimate_transform('similarity', src_pts, DST_PTS)
         
-        image = image/255.
+        end_estimatetransform_time = time.time()
+        estimatetransform_time = end_estimatetransform_time - start_estimatetransform_time
 
+        start_warp_time = time.time()
+
+        image = image/255.
         dst_image = warp(image, tform.inverse, output_shape=(self.resolution_inp, self.resolution_inp))
         dst_image = dst_image.transpose(2,0,1)
-        return {'image': torch.tensor(dst_image).float(),
+        
+        end_warp_time = time.time()
+        warp_time = end_warp_time - start_warp_time
+        
+        start_tensors_time = time.time()
+
+        image_tensor = torch.tensor(dst_image).float()
+        tform_tensor = torch.tensor(tform.params).float()
+        original_image_tensor = torch.tensor(image.transpose(2,0,1)).float()
+
+        end_tensors_time = time.time()
+        tensors_time = end_tensors_time - start_tensors_time
+        
+
+        # total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
+        # prepareimage_time_percentage = get_percentage(prepareimage_time, total_time)
+        # facedetector_time_percentage = get_percentage(facedetector_time, total_time)
+        # bbox2point_time_percentage = get_percentage(bbox2point_time, total_time)
+        # estimatetransform_time_percentage = get_percentage(estimatetransform_time, total_time)
+        # warp_time_percentage = get_percentage(warp_time, total_time)
+        # tensors_time_percentage = get_percentage(tensors_time, total_time)
+        # print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+        # print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+        # print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+        # print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+        # print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+        # print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+        # print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+        # print(f"++++++++++++")
+
+        return {'image': image_tensor,
                 'imagename': 'frame',
-                'tform': torch.tensor(tform.params).float(),
-                'original_image': torch.tensor(image.transpose(2,0,1)).float(),
+                'tform': tform_tensor,
+                'original_image': original_image_tensor,
                 'bbox': bbox,
                 'bbox2point': self.bbox2point
                 }
+    
+def get_percentage(part,whole):
+    return part/whole * 100

@@ -65,6 +65,7 @@ global_args = None
 head_mesh = None
 input_image = None
 deca_and_solvepnp_time = None
+time_logs = None
 
 visualizer3d = None
 camera = None
@@ -74,12 +75,15 @@ landmarks3D = None
 vertices = None
 landmarks2Dfullres = None
 rotation_vector = None
+rotation_matrix = None
 translation_vector = None
 transform_matrix = np.eye(4)
 distance = None
 vertices_rotated_translated = None
 desired_eye_distance = None
 tmirror = np.array([[-1], [-1], [-1]])
+ear_points_2d = None
+
 face_detector = detectors.FAN()
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -172,31 +176,46 @@ def main(args):
             print(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
-            print(f"transform matrix {transform_matrix}")
-    
-    # Don't forget to remove the hooks when you're done
-    # keyboard.unhook_all()
+            print(f"--------------------------")
+                
+            # print(f"transform matrix {transform_matrix}")
 
 
 def deca_and_solvepnp(input_image):
     global landmarks3D, vertices, landmarks2Dfullres
     global translation_vector, rotation_vector
-
+    # ---- ACQUISITION
+    start_acquisition_time = time.time()
+    
     imagedata = datasets.CameraData(input_image, face_detector)[0]
-    image = imagedata["image"].to(device)[None, ...]
+    
+    end_acquisition_time = time.time()
+    acquisition_time = end_acquisition_time - start_acquisition_time
+    # ---- end ACQUISITION
+    
+    # ---- PREPARE DATA
+    start_preparedata_time = time.time()
 
+    image = imagedata["image"].to(device)[None, ...]
     tform = imagedata["tform"][None, ...]
     tform = torch.inverse(tform).transpose(1, 2).to(device)
-    # print("TFORM ", tform.shape, tform)
-    # print("TFORM ", tform.shape)
     original_image = imagedata["original_image"][None, ...].to(device)
-
     _, image_height, image_width = imagedata["original_image"].shape
 
+    end_preparedata_time = time.time()
+    preparedata_time = end_preparedata_time - start_preparedata_time
+    # ---- end PREPARE DATA
+
     # ---- ENCODING ----
+    start_encoding_time = time.time()
+
     codedict = deca.encode(image)
 
+    end_encoding_time = time.time()
+    encoding_time = end_encoding_time - start_encoding_time
+    
     # ---- DECODING ----
+    start_decoding_time = time.time()
 
     opdict = deca.decode_fast(
         codedict,
@@ -206,8 +225,11 @@ def deca_and_solvepnp(input_image):
         return_vis=False,
         full_res_landmarks2D=True,
     )
-
+    end_decoding_time = time.time()
+    decoding_time = end_decoding_time - start_decoding_time
+    
     # ---- LANDMARKS ----
+    start_landmarks_time = time.time()
 
     landmarks3D = opdict["landmarks3d_world"][0].cpu().numpy()[:, :3]
     scaling_factor = scalePoints(landmarks3D, 39, 42, desired_eye_distance)
@@ -219,7 +241,12 @@ def deca_and_solvepnp(input_image):
     vertices = opdict["verts"][0].cpu().numpy()[:, :3]
     scalePoints(vertices, desiredScalingFactor=scaling_factor)
 
+    end_landmarks_time = time.time()
+    landmarks_time = end_landmarks_time - start_landmarks_time
+    
     # ---- SOLVEPNP ----
+    start_solvepnp_time = time.time()
+
     success, rotation_vector, translation_vector = cv2.solvePnP(
         landmarks3D,
         # landmarks2D,
@@ -227,20 +254,42 @@ def deca_and_solvepnp(input_image):
         camera_matrix,
         camera_dist_coeffs,
     )
+    end_solvepnp_time = time.time()
+    solvepnp_time = end_solvepnp_time - start_solvepnp_time
 
+    #PRINT:
+    if time_logs:
+        total_time = acquisition_time + preparedata_time + encoding_time + decoding_time + landmarks_time + solvepnp_time
+        acquisition_time_percentage = get_percentage(acquisition_time, total_time)
+        preparedata_time_percentage = get_percentage(preparedata_time, total_time)
+        encoding_time_percentage = get_percentage(encoding_time, total_time)
+        decoding_time_percentage = get_percentage(decoding_time, total_time)
+        landmarks_time_percentage = get_percentage(landmarks_time, total_time)
+        solvepnp_time_percentage = get_percentage(solvepnp_time, total_time)
+        print(f"--- TIMERS ---[{total_time:.3f}]")
+        print(f"acquisition_time [{acquisition_time_percentage:.1f}%] {acquisition_time:.3f}")
+        print(f"preparedata_time [{preparedata_time_percentage:.1f}%] {preparedata_time:.3f}")
+        print(f"encoding_time [{encoding_time_percentage:.1f}%] {encoding_time:.3f}")
+        print(f"decoding_time [{decoding_time_percentage:.1f}%] {decoding_time:.3f}")
+        print(f"landmarks_time [{landmarks_time_percentage:.1f}%] {landmarks_time:.3f}")
+        print(f"solvepnp_time [{solvepnp_time_percentage:.1f}%] {solvepnp_time:.3f}")
+    
+
+          
     return success
     # breakpoint()
 
-def visualize3d():
-    global head_mesh
-    rotation_matrix = cv2.Rodrigues(rotation_vector)[0].T
-    rotation_matrix[0, :] *= 1  # Invert X-axis
-    rotation_matrix[1, :] *= -1  # Invert Y-axis
-    rotation_matrix[2, :] *= -1  # Invert Z-axis
+def get_percentage(part,whole):
+    return part/whole * 100
 
-    vertices_rotated = np.matmul(vertices, rotation_matrix)
-    mirrored_translation = translation_vector * tmirror
-    vertices_rotated_translated = vertices_rotated + mirrored_translation.T
+def visualize3d():
+    global head_mesh, rotation_matrix
+    global ear_points_2d
+   
+    ear_points_2d = projectEarPointsTo2D()
+    
+    vertices_rotated = applyMirrorRotation(vertices)
+    vertices_rotated_translated = applyMirrorTranslation(vertices_rotated)
 
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
 
@@ -249,14 +298,44 @@ def visualize3d():
     visualizer3d.poll_events()
     visualizer3d.update_renderer()
 
+def applyMirrorRotation(vertices):
+    rotation_matrix = cv2.Rodrigues(rotation_vector)[0].T
+    rotation_matrix[0, :] *= 1  # Invert X-axis
+    rotation_matrix[1, :] *= -1  # Invert Y-axis
+    rotation_matrix[2, :] *= -1  # Invert Z-axis
+    return np.matmul(vertices, rotation_matrix)
+
+def applyMirrorTranslation(vertices):
+    mirrored_translation = translation_vector * tmirror
+    return vertices + mirrored_translation.T
 
 def visualize2d():
     global input_image
+    
+    # input_image = cv2.flip(input_image, 1)
+    # landmarks = cv2.flip(landmarks2Dfullres, 0)
+    
     input_image = draw_points(input_image, landmarks2Dfullres)
+    
+    input_image = draw_points(input_image, ear_points_2d, 3, (255,0,0))
+    
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     draw_text(input_image, text)
     cv2.imshow(camera_window_name, input_image)
 
+def projectEarPointsTo2D():
+    right_ear_index = 1760
+    left_ear_index = 502
+    
+    head_mesh_vertices = np.asarray(head_mesh.vertices)
+    ear_points = np.array([head_mesh_vertices[right_ear_index], head_mesh_vertices[left_ear_index]])
+    
+    ear_points_2d, _= cv2.projectPoints(ear_points, np.eye(3), np.zeros(3), camera_matrix, camera_dist_coeffs)
+    ear_points_2d = ear_points_2d.squeeze()
+    return ear_points_2d
+    
+    
+    
 def draw_text(input_image, text):
     # Define the font for the text
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -322,10 +401,10 @@ def save_solvepnp_transform():
     with open(output_folder+f"/solvepnp_transform.txt", 'ab') as file:
         np.savetxt(file, transform_matrix)
 
-def draw_points(image, landmarks2D):
+def draw_points(image, landmarks2D, radius=2, color=(0, 0, 255)):
     for point in landmarks2D:
         x, y = int(round(point[0])), int(round(point[1]))
-        cv2.circle(image, (x, y), radius=2, color=(0, 0, 255), thickness=-1)
+        cv2.circle(image, (x, y), radius=radius, color=color, thickness=-1)
     return image
 
 
@@ -514,6 +593,7 @@ def load_config():
     global save_mesh_expression_with_landmarks3d
     global save_image_with_landmarks2d
     global save_solvepnp_rototranslation
+    global time_logs
     
     with open(global_args.config, "r") as stream:
         try:
@@ -561,6 +641,7 @@ def load_config():
     save_mesh_expression_with_landmarks3d = output["save_mesh_expression_with_landmarks3d"]
     save_image_with_landmarks2d = output["save_image_with_landmarks2d"]
     save_solvepnp_rototranslation = output["save_solvepnp_rototranslation"]
+    time_logs = output["time_logs"]
     
     head_mesh_path = config["head_mesh"]
 

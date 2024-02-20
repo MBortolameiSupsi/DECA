@@ -297,14 +297,12 @@ class DECA(nn.Module):
         straight_pose = codedict['pose'].clone()
         straight_pose[:, :3] = torch.zeros_like(straight_pose[:, :3])
         
-        # verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=zero_pose_params)
-        # _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
-        # breakpoint()
-        # verts, _, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=None)
-        # _, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
         # print(codedict["pose"])
-        verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=straight_pose)
-        _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
+
+        # verts, _, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=straight_pose)
+        # _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
+
+        verts, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'],pose_params_straight=straight_pose, pose_params_real=codedict['pose'])
         if self.cfg.model.use_tex:
             # print("flametex")
             albedo = self.flametex(codedict['tex'])
