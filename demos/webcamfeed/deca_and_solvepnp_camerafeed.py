@@ -188,7 +188,7 @@ def deca_and_solvepnp(input_image):
     # ---- ACQUISITION
     start_acquisition_time = time.time()
     
-    imagedata = datasets.CameraData(input_image, face_detector)[0]
+    imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
     
     end_acquisition_time = time.time()
     acquisition_time = end_acquisition_time - start_acquisition_time

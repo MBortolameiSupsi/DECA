@@ -146,14 +146,15 @@ class TestData(Dataset):
                 }
     
 class CameraData(Dataset):
-    def __init__(self, image, face_detector, iscrop=True, crop_size=224, scale=1.25):
+    def __init__(self, image, face_detector, iscrop=True, crop_size=224, scale=1.25, time_logs = False):
         self.image = image
         self.crop_size = crop_size
         self.scale = scale
         self.iscrop = iscrop
         self.resolution_inp = crop_size
         self.face_detector = face_detector
-    
+        self.time_logs = time_logs
+        
     def __len__(self):
         # We only have one image in the dataset
         return 1
@@ -241,22 +242,22 @@ class CameraData(Dataset):
         end_tensors_time = time.time()
         tensors_time = end_tensors_time - start_tensors_time
         
-
-        total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
-        prepareimage_time_percentage = get_percentage(prepareimage_time, total_time)
-        facedetector_time_percentage = get_percentage(facedetector_time, total_time)
-        bbox2point_time_percentage = get_percentage(bbox2point_time, total_time)
-        estimatetransform_time_percentage = get_percentage(estimatetransform_time, total_time)
-        warp_time_percentage = get_percentage(warp_time, total_time)
-        tensors_time_percentage = get_percentage(tensors_time, total_time)
-        print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
-        print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
-        print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
-        print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
-        print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
-        print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
-        print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
-        print(f"++++++++++++")
+        if(self.time_logs):
+            total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
+            prepareimage_time_percentage = get_percentage(prepareimage_time, total_time)
+            facedetector_time_percentage = get_percentage(facedetector_time, total_time)
+            bbox2point_time_percentage = get_percentage(bbox2point_time, total_time)
+            estimatetransform_time_percentage = get_percentage(estimatetransform_time, total_time)
+            warp_time_percentage = get_percentage(warp_time, total_time)
+            tensors_time_percentage = get_percentage(tensors_time, total_time)
+            print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+            print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+            print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+            print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+            print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+            print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+            print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+            print(f"++++++++++++")
 
         return {'image': image_tensor,
                 'imagename': 'frame',
