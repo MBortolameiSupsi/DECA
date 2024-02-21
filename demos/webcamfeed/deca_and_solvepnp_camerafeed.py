@@ -84,6 +84,7 @@ desired_eye_distance = None
 tmirror = np.array([[-1], [-1], [-1]])
 ear_points_2d = None
 
+# face_detector = detectors.FAN()
 face_detector = detectors.MEDIAPIPE()
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -286,7 +287,6 @@ def visualize3d():
     global head_mesh, rotation_matrix
     global ear_points_2d
    
-    ear_points_2d = projectEarPointsTo2D()
     
     vertices_rotated = applyMirrorRotation(vertices)
     vertices_rotated_translated = applyMirrorTranslation(vertices_rotated)
@@ -295,6 +295,7 @@ def visualize3d():
 
     visualizer3d.update_geometry(head_mesh)
 
+    ear_points_2d = projectEarPointsTo2D()
     visualizer3d.poll_events()
     visualizer3d.update_renderer()
 
