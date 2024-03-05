@@ -315,13 +315,15 @@ def visualize2d():
     
     # input_image = cv2.flip(input_image, 1)
     # landmarks = cv2.flip(landmarks2Dfullres, 0)
-    
+    print(f"Visualize2d landmarks2Dfullres.shape {landmarks2Dfullres.shape} -  input_image.shape {input_image.shape}")
+
     input_image = draw_points(input_image, landmarks2Dfullres)
     
     input_image = draw_points(input_image, ear_points_2d, 3, (255,0,0))
     
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     draw_text(input_image, text)
+    print(f"Visualize2d input_image.shape {input_image.shape}")
     cv2.imshow(camera_window_name, input_image)
 
 def projectEarPointsTo2D():

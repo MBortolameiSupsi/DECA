@@ -11,6 +11,7 @@
 # THE SOFTWARE.
 # -----------------------------------------------------------------------------
 
+from calendar import c
 from arena_api.system import system
 from arena_api.buffer import *
 
@@ -67,10 +68,11 @@ def setup(device):
     nodemap = device.nodemap
     nodes = nodemap.get_node(['Width', 'Height', 'PixelFormat'])
 
-    nodes['Width'].value = 1280
-    nodes['Height'].value = 720
-    nodes['PixelFormat'].value = 'RGB8'
-
+    nodes['Width'].value = 2048
+    nodes['Height'].value = 1536
+    nodes['PixelFormat'].value = 'BGR8'
+    # nodes['DecimationHorizontal'].value = 2
+    # nodes['DecimationVertical'].value = 2
     num_channels = 3
 
     # Stream nodemap
@@ -130,8 +132,8 @@ def example_entry_point():
             """
             npndarray = np.ndarray(buffer=array, dtype=np.uint8, shape=(item.height, item.width, buffer_bytes_per_pixel))
             
-            fps = str(1/(curr_frame_time - prev_frame_time))
-            cv2.putText(npndarray, fps, (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+            # fps = str(1/(curr_frame_time - prev_frame_time))
+            # cv2.putText(npndarray, fps, (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
             cv2.imshow('Lucid', npndarray)
             """

@@ -1,0 +1,29 @@
+head_mesh: "./head_template_centered_scaled.ply"
+source:
+    type: "lucid-camera" 
+    # type: "folder" 
+    camera_index: 0
+    folder: ""
+    # folder: "./examples_webcam_640_2"
+
+camera:
+    calibration_data: "./calibration_data_lucid_640.npz"
+    capture_resolution_width: 640
+    capture_resolution_height: 360
+
+visualize:
+    visualizer2d: True
+    visualizer2d_width: 800
+    visualizer2d_height: 800
+    visualizer3d: True
+
+output:
+    folder: "./results"    
+    save_solvepnp_rototranslation: True
+    # the following works only in when source type is folder
+    # otherwise it would save a mesh+img for each frame from the webcam
+    # Note: if you press P while focus on the 3D visualizer window, 
+    # you'll save a snapshot of mesh+img
+    save_mesh_expression_with_landmarks3d: True
+    save_image_with_landmarks2d: True
+    time_logs: False
