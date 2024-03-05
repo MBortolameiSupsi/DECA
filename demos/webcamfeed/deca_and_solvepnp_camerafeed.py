@@ -608,7 +608,7 @@ def load_config():
     camera_height = camera["capture_resolution_height"]
     camera_calibration_data = camera["calibration_data"]
     if camera_calibration_data != None or camera_calibration_data != "":
-        camera_data = np.load(camera_calibration_data)
+        camera_data = np.load(os.path.join(script_dir, camera_calibration_data))
         if camera_data != None:
             camera_matrix = np.asarray(camera_data["camera_matrix"], dtype=np.float32)
             camera_dist_coeffs = np.asarray(
@@ -644,7 +644,7 @@ def load_config():
     save_solvepnp_rototranslation = output["save_solvepnp_rototranslation"]
     time_logs = output["time_logs"]
     
-    head_mesh_path = config["head_mesh"]
+    head_mesh_path = os.path.join(script_dir, config["head_mesh"])
 
     visualize = config["visualize"]
     visualizer2d = visualize["visualizer2d"]
@@ -659,7 +659,7 @@ if __name__ == "__main__":
     # Additional Arguments not in original lib
     parser.add_argument(
         "--config",
-        default="./config.yaml",
+        default=os.path.join(script_dir,"./config.yaml"),
         type=str,
         help="path to the config file",
     )

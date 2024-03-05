@@ -57,6 +57,11 @@ imageToUndistort = '/img (6)_640x360.jpg'
 calibrationResultImage = 'calibresult_webcam_side_640_2.png'
 calibrationData = 'calibration_data_webcam_side_640_2'
 
+imagesFolder = './images_webcam_razer_640'
+imageToUndistort = '/img (6)_640x360.jpg'
+calibrationResultImage = 'calibresult_webcam_side_640_2.png'
+calibrationData = 'calibration_data_razer_640'
+
 objp = np.zeros((rows*columns, 3), np.float32)
 objp[:, :2] = np.mgrid[0:rows, 0:columns].T.reshape(-1, 2)
 

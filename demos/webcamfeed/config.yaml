@@ -7,7 +7,8 @@ source:
     # folder: "./examples_webcam_640_2"
 
 camera:
-    calibration_data: "./calibration_data_webcam_side_640_2.npz"
+    # calibration_data: "./calibration_data_webcam_side_640_2.npz"
+    calibration_data: "./calibration_data_razer_640.npz"
     capture_resolution_width: 640
     capture_resolution_height: 360
 

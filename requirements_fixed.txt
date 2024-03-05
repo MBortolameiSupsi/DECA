@@ -1,17 +1,30 @@
 #to install all this requirements
 #`pip install -r requirements.txt`
-numpy==1.18.5
-scipy==1.4.1 
-chumpy==0.69
-scikit-image==0.15 
-opencv-python==4.1.1 
-scikit-image==0.15     #skimage
-PyYAML==5.1.1         
-torch==1.6.0   # for compatible with pytorch3d
-torchvision==0.7.0
-face-alignment
+numpy==1.23.1
+scipy==1.12.0
+chumpy==0.70
+scikit-image==0.21.0
+opencv-python==4.8.1.78
+PyYAML==6.0.1         
+torch==2.1.1   # for compatible with pytorch3d
+torchvision==0.16.1
+face-alignment==1.4.1
 yacs==0.1.8
-kornia==0.4.0
-ninja
-fvcore
-# pytorch3d    
+kornia==0.7.0
+ninja==1.11.1
+fvcore==0.1.5.post20221221
+open3d
+mediapipe
+# pytorch3d==0.7.5 
+
+# remember to install cuda BEFORE pytorch 12.1 from https://developer.nvidia.com/cuda-12-1-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=10&target_type=exe_local
+
+# to install pytorch3d
+# conda install pytorch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 pytorch-cuda=12.1 -c pytorch -c nvidia
+# conda install -c fvcore -c iopath -c conda-forge fvcore iopath
+# pip install "git+https://github.com/facebookresearch/pytorch3d.git"
+# then you have to downgrade numpy
+# pip uninstall numpy
+# pip install numpy==1.23.1
+
+# download the pretrained model https://drive.google.com/file/d/1rp8kdyLPvErw2dTmqtjISRVvQLj6Yzje/view?pli=1
