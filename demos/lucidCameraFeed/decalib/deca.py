@@ -79,8 +79,8 @@ class DECA(nn.Module):
         self.E_detail = ResnetEncoder(outsize=self.n_detail).to(self.device)
         # decoders
         self.flame = FLAME(model_cfg).to(self.device)
-        if model_cfg.use_tex:
-            self.flametex = FLAMETex(model_cfg).to(self.device)
+        # if model_cfg.use_tex:
+        #     self.flametex = FLAMETex(model_cfg).to(self.device)
         self.D_detail = Generator(latent_dim=self.n_detail+self.n_cond, out_channels=1, out_scale=model_cfg.max_z, sample_mode = 'bilinear').to(self.device)
         # resume model
         model_path = self.cfg.pretrained_modelpath
@@ -156,137 +156,8 @@ class DECA(nn.Module):
             codedict['euler_jaw_pose'] = euler_jaw_pose  
         return codedict
 
-    # @torch.no_grad()
-    def decode(self, codedict, rendering=True, iddict=None, vis_lmk=True, return_vis=True, use_detail=True,
-                render_orig=False, original_image=None, tform=None, full_res_landmarks2D=False):
-        images = codedict['images']
-        batch_size = images.shape[0]
-        print("Decoding")
-        ## decode
-        verts, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
-        if self.cfg.model.use_tex:
-            print("flametex")
-            albedo = self.flametex(codedict['tex'])
-        else:
-            print("torch")
-            albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
-        landmarks3d_world = landmarks3d.clone()
-
-        ## projection
-        landmarks2d = util.batch_orth_proj(landmarks2d, codedict['cam'])[:,:,:2]; landmarks2d[:,:,1:] = -landmarks2d[:,:,1:]#; landmarks2d = landmarks2d*self.image_size/2 + self.image_size/2
-        landmarks3d = util.batch_orth_proj(landmarks3d, codedict['cam']); landmarks3d[:,:,1:] = -landmarks3d[:,:,1:] #; landmarks3d = landmarks3d*self.image_size/2 + self.image_size/2
-        trans_verts = util.batch_orth_proj(verts, codedict['cam']); trans_verts[:,:,1:] = -trans_verts[:,:,1:]
-        # print("landmarks2d now ",landmarks2d)
-        opdict = {
-            'verts': verts,
-            'trans_verts': trans_verts,
-            'landmarks2d': landmarks2d,
-            'landmarks3d': landmarks3d,
-            'landmarks3d_world': landmarks3d_world,
-        }
-        
-        if full_res_landmarks2D and original_image is not None and tform is not None :
-            images = original_image
-            points_scale = [self.image_size, self.image_size]
-            _, _, h, w = original_image.shape
-            print("full_res_landmarks2D points_scale self.image_size",self.image_size,"h", h, "w",w)
-            landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
-            opdict['landmarks2d_full_res'] = util.extract_full_res_landmarks(landmarks2d, images)
-            
-            #landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
-            
-        ## rendering
-        if return_vis and render_orig and original_image is not None and tform is not None:
-            print("slow return_vis and render_orig ")
-            points_scale = [self.image_size, self.image_size]
-            _, _, h, w = original_image.shape
-            print("points_scale self.image_size",self.image_size, "h", h, "w",w)
-            # import ipdb; ipdb.set_trace()
-            trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
-            landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
-            # print("landmarks2d now ",landmarks2d)
-            landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
-            background = original_image
-            images = original_image
-        else:
-            h, w = self.image_size, self.image_size
-            print("return_vis and render_orig ELSE", "h", h, "w",w)
-            background = None
-
-        if rendering:
-            print("rendering ")
-            # ops = self.render(verts, trans_verts, albedo, codedict['light'])
-            ops = self.render(verts, trans_verts, albedo, h=h, w=w, background=background)
-            ## output
-            opdict['grid'] = ops['grid']
-            opdict['rendered_images'] = ops['images']
-            opdict['alpha_images'] = ops['alpha_images']
-            opdict['normal_images'] = ops['normal_images']
-        
-        if self.cfg.model.use_tex:
-            opdict['albedo'] = albedo
-            
-        if use_detail:
-            print("use detail ")
-            uv_z = self.D_detail(torch.cat([codedict['pose'][:,3:], codedict['exp'], codedict['detail']], dim=1))
-            if iddict is not None:
-                uv_z = self.D_detail(torch.cat([iddict['pose'][:,3:], iddict['exp'], codedict['detail']], dim=1))
-            uv_detail_normals = self.displacement2normal(uv_z, verts, ops['normals'])
-            uv_shading = self.render.add_SHlight(uv_detail_normals, codedict['light'])
-            uv_texture = albedo*uv_shading
-
-            opdict['uv_texture'] = uv_texture 
-            opdict['normals'] = ops['normals']
-            opdict['uv_detail_normals'] = uv_detail_normals
-            opdict['displacement_map'] = uv_z+self.fixed_uv_dis[None,None,:,:]
-        
-        if vis_lmk:
-            print("vis_lmk ")
-            landmarks3d_vis = self.visofp(ops['transformed_normals'])#/self.image_size
-            landmarks3d = torch.cat([landmarks3d, landmarks3d_vis], dim=2)
-            opdict['landmarks3d'] = landmarks3d
-
-        if return_vis:
-            ## render shape
-            print("return_vis ")
-
-            shape_images, _, grid, alpha_images = self.render.render_shape(verts, trans_verts, h=h, w=w, images=background, return_grid=True)
-            detail_normal_images = F.grid_sample(uv_detail_normals, grid, align_corners=False)*alpha_images
-            shape_detail_images = self.render.render_shape(verts, trans_verts, detail_normal_images=detail_normal_images, h=h, w=w, images=background)
-            
-            ## extract texture
-            ## TODO: current resolution 256x256, support higher resolution, and add visibility
-            uv_pverts = self.render.world2uv(trans_verts)
-            uv_gt = F.grid_sample(images, uv_pverts.permute(0,2,3,1)[:,:,:,:2], mode='bilinear', align_corners=False)
-            if self.cfg.model.use_tex:
-                ## TODO: poisson blending should give better-looking results
-                if self.cfg.model.extract_tex:
-                    uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (uv_texture[:,:3,:,:]*(1-self.uv_face_eye_mask))
-                else:
-                    uv_texture_gt = uv_texture[:,:3,:,:]
-            else:
-                uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (torch.ones_like(uv_gt[:,:3,:,:])*(1-self.uv_face_eye_mask)*0.7)
-            
-            opdict['uv_texture_gt'] = uv_texture_gt
-            # print("landmarks2d now LAST",landmarks2d)
-            visdict = {
-                'inputs': images, 
-                'landmarks2d': util.tensor_vis_landmarks(images, landmarks2d),
-                'landmarks3d': util.tensor_vis_landmarks(images, landmarks3d),
-                'landmarks2d_full_res': util.extract_full_res_landmarks(landmarks2d, images),           
-                'shape_images': shape_images,
-                'shape_detail_images': shape_detail_images
-            }
-
-            if self.cfg.model.use_tex:
-                visdict['rendered_images'] = ops['images']
-
-            return opdict, visdict
-
-        else:
-            return opdict
-        
-    def decode_fast(self, codedict, rendering=True, iddict=None, vis_lmk=True, return_vis=True, use_detail=True,
+   
+    def decode_fast(self, codedict, rendering=True, vis_lmk=True,
                 render_orig=False, original_image=None, tform=None, full_res_landmarks2D=False):
         images = codedict['images']
         batch_size = images.shape[0]
@@ -303,12 +174,9 @@ class DECA(nn.Module):
         # _, landmarks2d, _ = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'], pose_params=codedict['pose'])
 
         verts, landmarks2d, landmarks3d = self.flame(shape_params=codedict['shape'], expression_params=codedict['exp'],pose_params_straight=straight_pose, pose_params_real=codedict['pose'])
-        if self.cfg.model.use_tex:
-            # print("flametex")
-            albedo = self.flametex(codedict['tex'])
-        else:
-            # print("torch")
-            albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
+
+        albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device) 
+
         landmarks3d_world = landmarks3d.clone()
         landmarks2d_world = landmarks2d.clone()
         
@@ -343,23 +211,9 @@ class DECA(nn.Module):
             # TODO: SERVE????? sballa tutti i landmarks.
             #landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
             
-        ## rendering
-        if return_vis and render_orig and original_image is not None and tform is not None:
-            print("slow return_vis and render_orig ")
-            points_scale = [self.image_size, self.image_size]
-            _, _, h, w = original_image.shape
-            print("points_scale self.image_size",self.image_size, "h", h, "w",w)
-            # import ipdb; ipdb.set_trace()
-            trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
-            landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
-            print("landmarks2d now ",landmarks2d)
-            landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
-            background = original_image
-            images = original_image
-       
 
         if rendering:
-            # print("rendering ")
+            print("rendering ")
             # ops = self.render(verts, trans_verts, albedo, codedict['light'])
             ops = self.render(verts, trans_verts, albedo, h=h, w=w, background=background)
             ## output
@@ -368,68 +222,14 @@ class DECA(nn.Module):
             opdict['alpha_images'] = ops['alpha_images']
             opdict['normal_images'] = ops['normal_images']
         
-        if self.cfg.model.use_tex:
-            opdict['albedo'] = albedo
-            
-        if use_detail:
-            print("use detail ")
-            uv_z = self.D_detail(torch.cat([codedict['pose'][:,3:], codedict['exp'], codedict['detail']], dim=1))
-            if iddict is not None:
-                uv_z = self.D_detail(torch.cat([iddict['pose'][:,3:], iddict['exp'], codedict['detail']], dim=1))
-            uv_detail_normals = self.displacement2normal(uv_z, verts, ops['normals'])
-            uv_shading = self.render.add_SHlight(uv_detail_normals, codedict['light'])
-            uv_texture = albedo*uv_shading
-
-            opdict['uv_texture'] = uv_texture 
-            opdict['normals'] = ops['normals']
-            opdict['uv_detail_normals'] = uv_detail_normals
-            opdict['displacement_map'] = uv_z+self.fixed_uv_dis[None,None,:,:]
-        
         if vis_lmk:
             # print("vis_lmk ")
             landmarks3d_vis = self.visofp(ops['transformed_normals'])#/self.image_size
             landmarks3d = torch.cat([landmarks3d, landmarks3d_vis], dim=2)
             opdict['landmarks3d'] = landmarks3d
 
-        if return_vis:
-            ## render shape
-            print("return_vis ")
-
-            shape_images, _, grid, alpha_images = self.render.render_shape(verts, trans_verts, h=h, w=w, images=background, return_grid=True)
-            detail_normal_images = F.grid_sample(uv_detail_normals, grid, align_corners=False)*alpha_images
-            shape_detail_images = self.render.render_shape(verts, trans_verts, detail_normal_images=detail_normal_images, h=h, w=w, images=background)
-            
-            ## extract texture
-            ## TODO: current resolution 256x256, support higher resolution, and add visibility
-            uv_pverts = self.render.world2uv(trans_verts)
-            uv_gt = F.grid_sample(images, uv_pverts.permute(0,2,3,1)[:,:,:,:2], mode='bilinear', align_corners=False)
-            if self.cfg.model.use_tex:
-                ## TODO: poisson blending should give better-looking results
-                if self.cfg.model.extract_tex:
-                    uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (uv_texture[:,:3,:,:]*(1-self.uv_face_eye_mask))
-                else:
-                    uv_texture_gt = uv_texture[:,:3,:,:]
-            else:
-                uv_texture_gt = uv_gt[:,:3,:,:]*self.uv_face_eye_mask + (torch.ones_like(uv_gt[:,:3,:,:])*(1-self.uv_face_eye_mask)*0.7)
-            
-            opdict['uv_texture_gt'] = uv_texture_gt
-            print("landmarks2d now LAST",landmarks2d)
-            visdict = {
-                'inputs': images, 
-                'landmarks2d': util.tensor_vis_landmarks(images, landmarks2d),
-                'landmarks3d': util.tensor_vis_landmarks(images, landmarks3d),
-                'landmarks2d_full_res': util.extract_full_res_landmarks(landmarks2d, images),           
-                'shape_images': shape_images,
-                'shape_detail_images': shape_detail_images
-            }
-
-            if self.cfg.model.use_tex:
-                visdict['rendered_images'] = ops['images']
-
-            return opdict, visdict
-
-        else:
-            return opdict
+    
+        return opdict
 
     def visualize(self, visdict, size=224, dim=2):
         '''

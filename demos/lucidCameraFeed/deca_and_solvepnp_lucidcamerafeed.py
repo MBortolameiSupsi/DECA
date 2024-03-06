@@ -69,10 +69,13 @@ head_mesh = None
 input_image = None
 deca_and_solvepnp_time = None
 time_logs = None
+fps = None
+avg_fps = None
 
 visualizer3d = None
 camera = None
 lucidCamera = None
+lucid_frame_item = None
 num_channels = None
 camera_window_name = None
 
@@ -101,27 +104,27 @@ device = "cuda"
 def main(args):
     global global_args, deca
     global input_image, transform_matrix, distance
-    global deca_and_solvepnp_time
+    global deca_and_solvepnp_time, fps
     global_args = args
     load_config()
     # DECA setup
 
-    # whether to use FLAME texture model to generate uv texture map
-    deca_cfg.model.use_tex = False
     # pytorch3d or standard(default)
     deca_cfg.rasterizer_type = "pytorch3d"
-    # whether to extract texture from input image as the uv texture map, set false if you want albedo map from FLAME model
-    deca_cfg.model.extract_tex = True
-
     deca = DECA(config=deca_cfg, device=device)
 
+    # head model, already scaled, must be provided
+    # set path through config.yaml
     load_head()
 
+    # view head mesh in 3d mirroring user movements
     if visualizer3d:
         start_visualizer3d()
+    # view camera feed with landmarks printed in 2d
     if visualizer2d:
         start_visualizer2d()
-
+    
+    # initialize the chosen source
     if source["type"] == "camera":
         start_webcam()
     if source["type"] == "folder":
@@ -129,13 +132,19 @@ def main(args):
     if source["type"] == "lucid-camera":
         start_lucid_camera()
 
+    # local variables
     deca_and_solvepnp_time = 0
     start_time = 0
     end_time = 0
+    frame_time_current = 0
+    frame_time_previous = 0
+    fpss = []
 
     torch.set_grad_enabled(False)
 
     while True:
+        frame_time_current = time.time()
+        acquisition_time_start = time.time()
         if source["type"] == "camera":
             ret, input_image = camera.read()
 
@@ -146,6 +155,7 @@ def main(args):
         elif source["type"] == "lucid-camera":
             lucid_frame = get_lucid_frame()
             # breakpoint()
+            # input_image = lucid_frame
             input_image = cv2.resize(lucid_frame, (640, 360))
             # input_image = input_image2.copy()
         elif source["type"] == "folder":
@@ -158,6 +168,10 @@ def main(args):
                 print("All images processed (or No Input Image at all)")
                 return
 
+        acquisition_time_end = time.time()
+        acquisition_time = acquisition_time_end - acquisition_time_start
+        
+        print(f"acquistion time is {acquisition_time:.3f}")
         start_time = time.time()
 
         # ----------------------------
@@ -166,6 +180,15 @@ def main(args):
 
         end_time = time.time()
         deca_and_solvepnp_time = end_time - start_time
+        
+        fps_num = (1/(frame_time_current - frame_time_previous))
+        fps = f"{fps_num:.2f}"
+        fpss.append(fps_num)
+        avg_fps = sum(fpss) / len(fpss)
+
+        # fps = f"{1/deca_and_solvepnp_time:.2f}"
+        frame_time_previous = frame_time_current
+        
         print(f"Sucess {success} landmarks2Dfullres.shape {landmarks2Dfullres.shape}")
         if success:
             start_visualize_time = time.time()
@@ -193,7 +216,12 @@ def main(args):
             print(f"--------------------------")
                 
             # print(f"transform matrix {transform_matrix}")
+        # cleanup
+        if source["type"] == "lucid-camera":
+            cleanup_lucidcamera_buffer()
+        
         if(should_exit):
+            print(f"AVG acquisition time {avg_fps:.2f}")
             return
 
 
@@ -237,8 +265,6 @@ def deca_and_solvepnp(input_image):
         codedict,
         original_image=original_image,
         tform=tform,
-        use_detail=False,
-        return_vis=False,
         full_res_landmarks2D=True,
     )
     end_decoding_time = time.time()
@@ -340,7 +366,10 @@ def visualize2d():
     input_image = draw_points(input_image, ear_points_2d, 3, (255,0,0))
     
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
-    draw_text(input_image, text)
+    draw_text(input_image, text, "top-right")
+    print(f"fps {fps}")
+    draw_text(input_image, fps, "top-left")
+
     print(f"Visualize2d input_image.shape {input_image.shape}")
     cv2.imshow(camera_window_name, input_image)
 
@@ -357,12 +386,16 @@ def projectEarPointsTo2D():
     
     
     
-def draw_text(input_image, text):
+def draw_text(input_image, text, position="top-right"):
     # Define the font for the text
     font = cv2.FONT_HERSHEY_SIMPLEX
     # Define the starting position for the text (top right corner)
-    base_x = input_image.shape[1] - 280
-    base_y = 40  # You may need to adjust these values
+    if position == "top-right":
+        base_x = input_image.shape[1] - 280
+        base_y = 40
+    elif position == "top-left":
+        base_x = 40
+        base_y = 40
     # Define the font scale and color
     font_scale = 1
     font_color = (0, 255, 0)  # Green color
@@ -613,30 +646,34 @@ def create_devices_with_tries():
 						f'the example again.')
 
 def get_lucid_frame():
+    global lucid_frame_item
     buffer = lucidCamera.get_buffer()
     """
     Copy buffer and requeue to avoid running out of buffers
     """
-    item = BufferFactory.copy(buffer)
+    lucid_frame_item = BufferFactory.copy(buffer)
     lucidCamera.requeue_buffer(buffer)
 
-    buffer_bytes_per_pixel = int(len(item.data)/(item.width * item.height))
+    buffer_bytes_per_pixel = int(len(lucid_frame_item.data)/(lucid_frame_item.width * lucid_frame_item.height))
     """
     Buffer data as cpointers can be accessed using buffer.pbytes
     """
-    array = (ctypes.c_ubyte * num_channels * item.width * item.height).from_address(ctypes.addressof(item.pbytes))
+    array = (ctypes.c_ubyte * num_channels * lucid_frame_item.width * lucid_frame_item.height).from_address(ctypes.addressof(lucid_frame_item.pbytes))
     """
     Create a reshaped NumPy array to display using OpenCV
     """
-    npndarray = np.ndarray(buffer=array, dtype=np.uint8, shape=(item.height, item.width, buffer_bytes_per_pixel))
+    npndarray = np.ndarray(buffer=array, dtype=np.uint8, shape=(lucid_frame_item.height, lucid_frame_item.width, buffer_bytes_per_pixel))
             
+    return npndarray
+
+def cleanup_lucidcamera_buffer():
+    global lucid_frame_item
     """
     Destroy the copied item to prevent memory leaks
+    NOTE: do this after any draw/show which use the item
+        and any derived data like array and npndarray
     """
-    image_out = npndarray.copy()
-    BufferFactory.destroy(item)
-    return image_out
-    # return npndarray
+    BufferFactory.destroy(lucid_frame_item)
 
 def get_images_from_folder():
     valid_extensions = (".jpg", ".jpeg", ".png")

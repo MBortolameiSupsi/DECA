@@ -1,13 +1,15 @@
 head_mesh: "./head_template_centered_scaled.ply"
 source:
-    type: "lucid-camera" 
+    # type: "lucid-camera" 
+    type: "camera" 
     # type: "folder" 
     camera_index: 0
     folder: ""
     # folder: "./examples_webcam_640_2"
 
 camera:
-    calibration_data: "./calibration_data_lucid_640.npz"
+    # calibration_data: "./calibration_data_lucid_640.npz"
+    calibration_data: "./calibration_data_webcam_side_640_2.npz"
     capture_resolution_width: 640
     capture_resolution_height: 360
 

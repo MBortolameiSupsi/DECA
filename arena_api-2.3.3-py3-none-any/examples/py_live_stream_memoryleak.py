@@ -20,6 +20,7 @@ import numpy as np
 import cv2
 import time
 
+# npndarray = None
 '''
 Live Stream: Introduction
     This example introduces the basics of running a live stream 
@@ -88,6 +89,7 @@ def setup(device):
 
 
 def example_entry_point():
+    # global npndarray
     """
     demonstrates live stream
     (1) Start device stream
@@ -109,54 +111,59 @@ def example_entry_point():
     curr_frame_time = 0
     prev_frame_time = 0
 
-    with device.start_stream():
+    device.start_stream()
+    """
+    Infinitely fetch and display buffer data until esc is pressed
+    """
+    while True:
+        # Used to display FPS on stream
+        curr_frame_time = time.time()
+
+        buffer = device.get_buffer()
         """
-        Infinitely fetch and display buffer data until esc is pressed
+        Copy buffer and requeue to avoid running out of buffers
         """
-        while True:
-            # Used to display FPS on stream
-            curr_frame_time = time.time()
+        item = BufferFactory.copy(buffer)
+        device.requeue_buffer(buffer)
 
-            buffer = device.get_buffer()
-            """
-            Copy buffer and requeue to avoid running out of buffers
-            """
-            item = BufferFactory.copy(buffer)
-            device.requeue_buffer(buffer)
-
-            buffer_bytes_per_pixel = int(len(item.data)/(item.width * item.height))
-            """
-            Buffer data as cpointers can be accessed using buffer.pbytes
-            """
-            array = (ctypes.c_ubyte * num_channels * item.width * item.height).from_address(ctypes.addressof(item.pbytes))
-            """
-            Create a reshaped NumPy array to display using OpenCV
-            """
-            npndarray = np.ndarray(buffer=array, dtype=np.uint8, shape=(item.height, item.width, buffer_bytes_per_pixel))
+        buffer_bytes_per_pixel = int(len(item.data)/(item.width * item.height))
+        """
+        Buffer data as cpointers can be accessed using buffer.pbytes
+        """
+        array = (ctypes.c_ubyte * num_channels * item.width * item.height).from_address(ctypes.addressof(item.pbytes))
+        """
+        Create a reshaped NumPy array to display using OpenCV
+        """
+        npndarray = np.ndarray(buffer=array, dtype=np.uint8, shape=(item.height, item.width, buffer_bytes_per_pixel))
             
-            # fps = str(1/(curr_frame_time - prev_frame_time))
-            # cv2.putText(npndarray, fps, (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+        fps = str(1/(curr_frame_time - prev_frame_time))
+        cv2.putText(npndarray, fps, (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+        
+        doStuffAndShowWithArgument(npndarray)
+        """
+        Destroy the copied item to prevent memory leaks
+        """
+        BufferFactory.destroy(item)
 
-            cv2.imshow('Lucid', npndarray)
-            """
-            Destroy the copied item to prevent memory leaks
-            """
-            BufferFactory.destroy(item)
+        prev_frame_time = curr_frame_time
 
-            prev_frame_time = curr_frame_time
-
-            """
-            Break if esc key is pressed
-            """
-            key = cv2.waitKey(1)
-            if key == 27:
-                break
+        """
+        Break if esc key is pressed
+        """
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
             
-        device.stop_stream()
-        cv2.destroyAllWindows()
+    device.stop_stream()
+    cv2.destroyAllWindows()
     
     system.destroy_device()
 
+def doStuffAndShow():
+	cv2.imshow('Lucid', npndarray)
+	
+def doStuffAndShowWithArgument(img):
+	cv2.imshow('Lucid', img)
 
 if __name__ == '__main__':
 	print('\nWARNING:\nTHIS EXAMPLE MIGHT CHANGE THE DEVICE(S) SETTINGS!')
