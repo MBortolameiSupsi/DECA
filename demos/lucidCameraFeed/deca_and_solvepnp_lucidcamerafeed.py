@@ -139,7 +139,7 @@ def main(args):
     frame_time_current = 0
     frame_time_previous = 0
     fpss = []
-
+    acquisition_times = []
     torch.set_grad_enabled(False)
 
     while True:
@@ -170,7 +170,7 @@ def main(args):
 
         acquisition_time_end = time.time()
         acquisition_time = acquisition_time_end - acquisition_time_start
-        
+        acquisition_times.append(acquisition_time)
         print(f"acquistion time is {acquisition_time:.3f}")
         start_time = time.time()
 
@@ -221,7 +221,9 @@ def main(args):
             cleanup_lucidcamera_buffer()
         
         if(should_exit):
-            print(f"AVG acquisition time {avg_fps:.2f}")
+            avg_acquisition_time = sum(acquisition_times) / len(acquisition_times)
+            print(f"AVG acquisition time {avg_acquisition_time:.2f}")
+            print(f"AVG fps time {avg_fps:.2f}")
             return
 
 
