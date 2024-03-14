@@ -189,7 +189,6 @@ def main(args):
         # fps = f"{1/deca_and_solvepnp_time:.2f}"
         frame_time_previous = frame_time_current
         
-        print(f"Sucess {success} landmarks2Dfullres.shape {landmarks2Dfullres.shape}")
         if success:
             start_visualize_time = time.time()
             distance = np.linalg.norm(translation_vector)
@@ -214,7 +213,8 @@ def main(args):
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
             print(f"--------------------------")
-                
+        else:
+            visualize2d(cameraFeedOnly=True)
             # print(f"transform matrix {transform_matrix}")
         # cleanup
         if source["type"] == "lucid-camera":
@@ -234,9 +234,12 @@ def deca_and_solvepnp(input_image):
     start_acquisition_time = time.time()
     
     imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
-    
     end_acquisition_time = time.time()
     acquisition_time = end_acquisition_time - start_acquisition_time
+    if(imagedata == None):
+      print("NO FACE!")
+      return False
+        
     # ---- end ACQUISITION
     
     # ---- PREPARE DATA
@@ -353,20 +356,24 @@ def applyMirrorTranslation(vertices):
     mirrored_translation = translation_vector * tmirror
     return vertices + mirrored_translation.T
 
-def visualize2d():
+def visualize2d(cameraFeedOnly = False):
     global input_image
     
-    # cv2.imwrite("prova.png", input_image)
-    # breakpoint()
-    # assert(12==0)
-    
-    # input_image = cv2.flip(input_image, 1)
-    # landmarks = cv2.flip(landmarks2Dfullres, 0)
-    print(f"Visualize2d landmarks2Dfullres.shape {landmarks2Dfullres.shape} -  input_image.shape {input_image.shape}")
+    if cameraFeedOnly:
+        print("showing feed only")
+        cv2.imshow(camera_window_name, cv2.flip(input_image, 1))
+        cv2.waitKey(1)
+        return;
+        
+    # landmarksFlipped = cv2.flip(landmarks2Dfullres, 1)
+    # print(f"Visualize2d landmarks2Dfullres.shape {landmarks2Dfullres.shape} -  input_image.shape {input_image.shape}")
+    # input_image = draw_points(input_image, landmarks2Dfullres)
+
     input_image = draw_points(input_image, landmarks2Dfullres)
     
     input_image = draw_points(input_image, ear_points_2d, 3, (255,0,0))
     
+    input_image = cv2.flip(input_image, 1)
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     draw_text(input_image, text, "top-right")
     print(f"fps {fps}")

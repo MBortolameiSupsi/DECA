@@ -119,8 +119,9 @@ class TestData(Dataset):
             else:
                 bbox, bbox_type = self.face_detector.run(image)
                 if len(bbox) < 4:
-                    print('no face detected! run original image')
-                    left = 0; right = h-1; top=0; bottom=w-1
+                    print('no face detected! return null')
+                    # left = 0; right = h-1; top=0; bottom=w-1
+                    return None
                 else:
                     left = bbox[0]; right=bbox[2]
                     top = bbox[1]; bottom=bbox[3]
@@ -197,8 +198,9 @@ class CameraData(Dataset):
             
             bbox, bbox_type = self.face_detector.run(image)
             if len(bbox) < 4:
-                print('no face detected! run original image')
-                left = 0; right = h-1; top=0; bottom=w-1
+                print('no face detected! return null')
+                # left = 0; right = h-1; top=0; bottom=w-1
+                return None
             else:
                 left = bbox[0]; right=bbox[2]
                 top = bbox[1]; bottom=bbox[3]
