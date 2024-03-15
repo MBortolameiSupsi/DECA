@@ -46,7 +46,6 @@ imageToUndistort = '/img (6).jpg'
 calibrationResultImage = 'calibresult_webcam_side.png'
 calibrationData = 'calibration_data_webcam_side'
 
-# Use this, since it's last
 imagesFolder = './images_webcam_side_640'
 imageToUndistort = '/img (6).jpg'
 calibrationResultImage = 'calibresult_webcam_side_640.png'
@@ -66,6 +65,17 @@ imagesFolder = './images_lucidcamera_640'
 imageToUndistort = '/img (15)_640x360.jpg'
 calibrationResultImage = 'calibresult_img (15).png'
 calibrationData = 'calibration_data_lucid_640'
+
+imagesFolder = './images_lucidcamera2_640'
+imageToUndistort = '/img (15)_640x360.jpg'
+calibrationResultImage = 'calibresult_img (15).png'
+calibrationData = 'calibration_data_lucid2_640'
+
+# Use this, since it's last
+imagesFolder = './images_lucidcamera3_640'
+imageToUndistort = '/img (15)_640x360.jpg'
+calibrationResultImage = 'calibresult_img (15).png'
+calibrationData = 'calibration_data_lucid3_640'
 
 objp = np.zeros((rows*columns, 3), np.float32)
 objp[:, :2] = np.mgrid[0:rows, 0:columns].T.reshape(-1, 2)
@@ -113,6 +123,7 @@ cv.destroyAllWindows()
 ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 print("Distortion coefficients:", dist, "\nCamera matrix:", mtx)
 print("tvecs:", tvecs)
+print("distance:", np.linalg.norm(tvecs))
 
 # Undistort an example image.
 # Make sure to use an image that exists in your directory.
