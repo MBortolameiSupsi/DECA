@@ -21,10 +21,13 @@ outputName = args.outputName
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 # Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-rows = 6
-columns = 9
+# rows = 6
+# columns = 9
+rows = 11
+columns = 8
 # Define the size of chessboard squares in millimeters.
-square_size = 23  # Adjust the square size to the actual size of your chessboard squares.
+# square_size = 23  # Adjust the square size to the actual size of your chessboard squares.
+square_size = 60
 
 # Use this, since it's last
 # imagesFolder = './images_lucidcamera3_640'

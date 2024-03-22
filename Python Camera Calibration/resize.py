@@ -42,9 +42,11 @@ for jpg_file in jpg_files:
         # Extract the base name without its extension
         base_name = os.path.splitext(os.path.basename(jpg_file))[0]
         resized_file_name = f"{base_name}_{new_width}x{new_height}.jpg"
-        resized_file_path = os.path.join(target_directory,f"{new_width}x{new_height}", resized_file_name)
-        cv2.imwrite(resized_file_path, resized_image)
-        print(f"Resizing {jpg_file}")
+        resized_file_path = os.path.join(target_directory,f"{new_width}x{new_height}")
+        os.makedirs(resized_file_path, exist_ok=True)
+        resized_file_completeURI = os.path.join(resized_file_path,resized_file_name)
+        cv2.imwrite(resized_file_completeURI, resized_image)
+        print(f"Resizing {resized_file_name} saved to {resized_file_path}")
         
     else:
         print(f"Error reading image {jpg_file}")
