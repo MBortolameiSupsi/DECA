@@ -1,0 +1,10 @@
+image_paths:
+    -   fromCamera1: "./images/commonImageWebcam_640x360.jpg"
+        fromCamera2: "./images/commonImageLucid_640x480.jpg"
+    -   fromCamera1: "./images/commonImageWebcam_640x360.jpg"
+        fromCamera2: "./images/commonImageLucid_640x480.jpg"
+    -   fromCamera1: "./images/commonImageWebcam_640x360.jpg"
+        fromCamera2: "./images/commonImageLucid_640x480.jpg"
+intrinsics:
+    camera1: "./calibration_data_webcam_lab.npz"    
+    camera2: "./calibration_data_lucid_lab.npz"    
