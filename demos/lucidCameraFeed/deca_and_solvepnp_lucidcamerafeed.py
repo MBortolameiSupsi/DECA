@@ -27,6 +27,7 @@ from datetime import datetime
 
 import open3d as o3d
 import yaml
+import csv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from decalib.deca import DECA
@@ -63,9 +64,16 @@ save_vertices_rotated_and_translated = None
 save_solvepnp_rototranslation = None
 save_mesh_expression_with_landmarks3d = None
 save_image_with_landmarks2d = None
+save_ear_points = None
 
 global_args = None
 head_mesh = None
+ear_trace_mesh = o3d.geometry.PointCloud()
+test_mesh = o3d.geometry.TriangleMesh()
+
+ear_csv = None
+csv_writer = None
+
 input_image = None
 deca_and_solvepnp_time = None
 time_logs = None
@@ -91,6 +99,7 @@ vertices_rotated_translated = None
 desired_eye_distance = None
 tmirror = np.array([[-1], [-1], [-1]])
 ear_points_2d = None
+bbox = None
 
 # face_detector = detectors.FAN()
 face_detector = detectors.MEDIAPIPE()
@@ -154,10 +163,7 @@ def main(args):
                 break
         elif source["type"] == "lucid-camera":
             lucid_frame = get_lucid_frame()
-            # breakpoint()
-            # input_image = lucid_frame
-            input_image = cv2.resize(lucid_frame, (640, 360))
-            # input_image = input_image2.copy()
+            input_image = cv2.resize(lucid_frame, (camera_width, camera_height))
         elif source["type"] == "folder":
             if images_from_folder.__len__() > 0:
                 input_image = images_from_folder.pop(0)
@@ -209,6 +215,8 @@ def main(args):
                 save_mesh_3d()
             if save_solvepnp_rototranslation:
                 save_solvepnp_transform()
+            if save_ear_points:
+                saveEarPoints()
             print(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
@@ -229,7 +237,7 @@ def main(args):
 
 def deca_and_solvepnp(input_image):
     global landmarks3D, vertices, landmarks2Dfullres
-    global translation_vector, rotation_vector
+    global translation_vector, rotation_vector, bbox
     # ---- ACQUISITION
     start_acquisition_time = time.time()
     
@@ -247,6 +255,7 @@ def deca_and_solvepnp(input_image):
 
     image = imagedata["image"].to(device)[None, ...]
     tform = imagedata["tform"][None, ...]
+    bbox = imagedata["bbox"]
     tform = torch.inverse(tform).transpose(1, 2).to(device)
     original_image = imagedata["original_image"][None, ...].to(device)
     _, image_height, image_width = imagedata["original_image"].shape
@@ -281,13 +290,21 @@ def deca_and_solvepnp(input_image):
     landmarks3D = opdict["landmarks3d_world"][0].cpu().numpy()[:, :3]
     scaling_factor = scalePoints(landmarks3D, 39, 42, desired_eye_distance)
     landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
+    eye_distance_now1 = getDesiredEyeDistance(landmarks3D, 39, 42)
+    print(f"Landmarks3d : After scaling by {scaling_factor} to reach {desired_eye_distance}, distance is: {eye_distance_now1}")
 
     landmarks2Dfullres = opdict["landmarks2d_full_res"][0]
     landmarks2Dfullres = np.ascontiguousarray(landmarks2Dfullres, dtype=np.float32)
 
     vertices = opdict["verts"][0].cpu().numpy()[:, :3]
-    scalePoints(vertices, desiredScalingFactor=scaling_factor)
-
+    # TODO: shouldn't we enforce that the distance between 3827, 3619
+    # is indeed the desired_eye_distance, instead of applying the same
+    # scaling factor we applied to the landmakark3D ?
+    scalePoints(vertices, 3827, 3619, desired_eye_distance)
+    
+    # scalePoints(vertices, desiredScalingFactor=scaling_factor)
+    eye_distance_now = getDesiredEyeDistance(vertices, 3827, 3619)
+    print(f"Vertices: After scaling by {scaling_factor} to reach {desired_eye_distance}, distance is: {eye_distance_now}")
     end_landmarks_time = time.time()
     landmarks_time = end_landmarks_time - start_landmarks_time
     
@@ -333,9 +350,8 @@ def visualize3d():
     global head_mesh, rotation_matrix
     global ear_points_2d
    
-    
-    vertices_rotated = applyMirrorRotation(vertices)
-    vertices_rotated_translated = applyMirrorTranslation(vertices_rotated)
+    vertices_rotated = applyRotation(vertices)
+    vertices_rotated_translated = applyTranslation(vertices_rotated)
 
     head_mesh.vertices = o3d.utility.Vector3dVector(vertices_rotated_translated)
 
@@ -345,16 +361,19 @@ def visualize3d():
     visualizer3d.poll_events()
     visualizer3d.update_renderer()
 
-def applyMirrorRotation(vertices):
+def applyRotation(vertices, mirror=True):
     rotation_matrix = cv2.Rodrigues(rotation_vector)[0].T
-    rotation_matrix[0, :] *= 1  # Invert X-axis
-    rotation_matrix[1, :] *= -1  # Invert Y-axis
-    rotation_matrix[2, :] *= -1  # Invert Z-axis
+    if mirror:
+        rotation_matrix[0, :] *= 1  # Invert X-axis
+        rotation_matrix[1, :] *= -1  # Invert Y-axis
+        rotation_matrix[2, :] *= -1  # Invert Z-axis
     return np.matmul(vertices, rotation_matrix)
 
-def applyMirrorTranslation(vertices):
-    mirrored_translation = translation_vector * tmirror
-    return vertices + mirrored_translation.T
+def applyTranslation(vertices, mirror=True):
+    translation = translation_vector
+    if mirror:
+        translation *= tmirror 
+    return vertices + translation.T
 
 def visualize2d(cameraFeedOnly = False):
     global input_image
@@ -372,7 +391,7 @@ def visualize2d(cameraFeedOnly = False):
     input_image = draw_points(input_image, landmarks2Dfullres)
     
     input_image = draw_points(input_image, ear_points_2d, 3, (255,0,0))
-    
+    draw_rect(input_image, bbox)
     input_image = cv2.flip(input_image, 1)
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     draw_text(input_image, text, "top-right")
@@ -383,16 +402,28 @@ def visualize2d(cameraFeedOnly = False):
     cv2.imshow(camera_window_name, input_image)
 
 def projectEarPointsTo2D():
-    right_ear_index = 1760
-    left_ear_index = 502
-    
-    head_mesh_vertices = np.asarray(head_mesh.vertices)
-    ear_points = np.array([head_mesh_vertices[right_ear_index], head_mesh_vertices[left_ear_index]])
+   
+    ear_points = getEarPoints3D();
     
     ear_points_2d, _= cv2.projectPoints(ear_points, np.eye(3), np.zeros(3), camera_matrix, camera_dist_coeffs)
     ear_points_2d = ear_points_2d.squeeze()
     return ear_points_2d
     
+def getEarPoints3D(decaReferenceSystem = False):
+    right_ear_index = 1760
+    left_ear_index = 502
+    
+    if(decaReferenceSystem):
+        # vertices contains the result of DECA
+        desired_eye_distance = getDesiredEyeDistance(vertices, 3827, 3619)
+        print(f"vertices now with eye distance at {desired_eye_distance}")
+        head_mesh_vertices = np.asarray(vertices)
+    else:
+        #head_mesh at this point has been rotated and mirrored
+        # for 3d visualization
+        head_mesh_vertices = np.asarray(head_mesh.vertices)
+    ear_points = np.array([head_mesh_vertices[left_ear_index],head_mesh_vertices[right_ear_index]])
+    return ear_points
     
     
 def draw_text(input_image, text, position="top-right"):
@@ -430,7 +461,7 @@ def save_mesh_3d():
     now = datetime.now()
     date_time = now.strftime("%Y%m%d_%H%M%S")
     relative_path = os.path.join(
-        script_dir,
+        # script_dir,
         output_folder,
         f"mesh_expression_{date_time}.ply",
     )
@@ -445,12 +476,10 @@ def save_img_2d():
     now = datetime.now()
     # This will give you time precise up to milliseconds
     date_time = now.strftime("%Y%m%d_%H%M%S%f")[:17]  
-    relative_path = os.path.join(
-        script_dir,
-        output_folder,
-        f"image_landmarks2d_{date_time}.png",
-    )
+    relative_path = os.path.join(output_folder,f"image_landmarks2d_{date_time}.png")
+    relative_path_original = os.path.join(output_folder,f"ORIGINAL_image_landmarks2d_{date_time}.png")
     print(f"saving {date_time}")
+    cv2.imwrite(relative_path_original, input_image)
     frame_with_landmarks = draw_points(input_image, landmarks2Dfullres)
     cv2.imwrite(relative_path, frame_with_landmarks)
 
@@ -464,6 +493,42 @@ def save_solvepnp_transform():
     with open(output_folder+f"/solvepnp_transform.txt", 'ab') as file:
         np.savetxt(file, transform_matrix)
 
+def saveEarPoints():
+    global ear_trace_mesh
+    new_ear_points = getEarPoints3D(True)
+    ear_points_rotated = applyRotation(new_ear_points, False)
+    ear_points_translated = applyTranslation(ear_points_rotated, False)
+    timestamp = time.time()
+    for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar"]):
+        row = [timestamp, *ear_point, label]
+        csv_writer.writerow(row)
+        # Flush the contents to the file to ensure it's written immediately
+        ear_csv.flush()
+    
+    new_ear_points = np.vstack((np.asarray(ear_trace_mesh.points), ear_points_translated))
+    ear_trace_mesh.points = o3d.utility.Vector3dVector(new_ear_points)
+    path_ply = os.path.join(output_folder, f"ear_trace.ply")   
+    o3d.io.write_point_cloud(path_ply, ear_trace_mesh)
+    
+    # test save head mesh too
+    vertices_rotated = applyRotation(vertices, False)
+    vertices_translated = applyTranslation(vertices_rotated, False)
+    # new_vertices = np.vstack((np.asarray(test_mesh.vertices), vertices_translated))
+    # test_mesh.vertices = o3d.utility.Vector3dVector(new_vertices)
+    test_mesh.vertices = o3d.utility.Vector3dVector(vertices_translated)
+    relative_path2 = os.path.join(output_folder,f"vertices_test.ply")
+    o3d.io.write_triangle_mesh(relative_path2, test_mesh)
+    
+    with open(output_folder+f"/ear_points.txt", 'ab') as file:
+        np.savetxt(file, getEarPoints3D())
+        
+def draw_rect(image, bbox):
+    left = int(round(bbox[0]))
+    top = int(round(bbox[1]))
+    right = int(round(bbox[2]))
+    bottom = int(round(bbox[3]))
+    cv2.rectangle(image, (left, top), (right, bottom), (0, 0, 255), 2)  # (B, G, R) color values
+    return image   
 def draw_points(image, landmarks2D, radius=2, color=(0, 0, 255)):
     for point in landmarks2D:
         # print(f"draw_points of point {point}")
@@ -502,9 +567,9 @@ def add_gizmo(vis, origin=[0, 0, 0], size=1):
 
 
 def add_wireframes(vis):
-    commonWidth = 100
-    commonHeight = 100
-    commonDepth = 100
+    commonWidth = 200
+    commonHeight = 200
+    commonDepth = 200
     shortSide = 0.1
     plane_origin = np.array([-commonWidth / 2, -commonHeight / 2, -commonDepth])
 
@@ -741,8 +806,6 @@ def on_press_q(e):
     elif(source["type"] == "camera"):
         stop_webcam()
         
-
-
 def on_press_p(e):
     print("KEY p")
     save_mesh_3d()
@@ -760,6 +823,7 @@ def load_config():
     global save_mesh_expression_with_landmarks3d
     global save_image_with_landmarks2d
     global save_solvepnp_rototranslation
+    global save_ear_points, csv_writer, ear_csv
     global time_logs
     
     with open(global_args.config, "r") as stream:
@@ -808,6 +872,15 @@ def load_config():
     save_mesh_expression_with_landmarks3d = output["save_mesh_expression_with_landmarks3d"]
     save_image_with_landmarks2d = output["save_image_with_landmarks2d"]
     save_solvepnp_rototranslation = output["save_solvepnp_rototranslation"]
+    save_ear_points = output["save_ear_points"]
+    if save_ear_points:
+        csv_path = os.path.join(output_folder, f"ear_trace.csv")   
+        ear_csv = open(csv_path, mode='w', newline='')
+        csv_writer = csv.writer(ear_csv)
+        # header
+        header = ["timestamp", "x", "y", "z", "label"]
+        csv_writer.writerow(header)
+        ear_csv.flush()
     time_logs = output["time_logs"]
     
     head_mesh_path = os.path.join(script_dir, config["head_mesh"])
