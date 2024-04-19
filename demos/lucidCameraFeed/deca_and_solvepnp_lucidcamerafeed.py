@@ -40,7 +40,8 @@ from decalib.utils.tensor_cropper import transform_points
 from arena_api.system import system
 from arena_api.buffer import *
 import ctypes
-
+from skimage.transform import estimate_transform, warp, resize, rescale
+import mediapipe as mp
 
 # GLOBAL VARIABLES
 camera_matrix = None
@@ -109,6 +110,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 deca = None
 device = "cuda"
 
+mp_face_mesh = mp.solutions.face_mesh
+model = mp_face_mesh.FaceMesh()
 
 def main(args):
     global global_args, deca
@@ -241,7 +244,9 @@ def deca_and_solvepnp(input_image):
     # ---- ACQUISITION
     start_acquisition_time = time.time()
     
-    imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
+    # imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
+    imagedata = create_camera_data(input_image)
+    
     end_acquisition_time = time.time()
     acquisition_time = end_acquisition_time - start_acquisition_time
     if(imagedata == None):
@@ -890,6 +895,158 @@ def load_config():
     visualizer2d_width = visualize["visualizer2d_width"]
     visualizer2d_height = visualize["visualizer2d_height"]
     visualizer3d = visualize["visualizer3d"]
+
+
+def create_camera_data(image):
+    crop_size=224 
+
+    # Prepare Image
+    start_prepareimage_time = time.time()
+    # ------
+    image = prepare_image(image)
+    # ------    
+    end_prepareimage_time = time.time()
+    prepareimage_time = end_prepareimage_time - start_prepareimage_time
+    
+    # Detect Face
+    start_facedetector_time = time.time()
+    # ------
+    bbox_type, bbox, left, right, top, bottom = detectFace(image)
+    # ------
+    end_facedetector_time = time.time()
+    facedetector_time = end_facedetector_time - start_facedetector_time
+    
+    # Calc the src points
+    start_bbox2point_time = time.time()
+    # ------
+    src_pts = bbox2pointCalc(bbox_type, left, right, top, bottom)
+    # ------
+    end_bbox2point_time = time.time()
+    bbox2point_time = end_bbox2point_time - start_bbox2point_time
+    
+    # Calc the transform
+    start_estimatetransform_time = time.time()
+    # ------
+    tform = estimateTransformCalc(src_pts, crop_size)
+    # ------
+    end_estimatetransform_time = time.time()
+    estimatetransform_time = end_estimatetransform_time - start_estimatetransform_time
+
+    # Warp
+    start_warp_time = time.time()
+    # ------
+    dst_image = warpCalc(image, tform, crop_size)
+    # ------
+    end_warp_time = time.time()
+    warp_time = end_warp_time - start_warp_time
+    
+    # Prepare tensors
+    start_tensors_time = time.time()
+    # ------
+    image_tensor = torch.tensor(dst_image).float()
+    tform_tensor = torch.tensor(tform.params).float()
+    original_image_tensor = torch.tensor(image.transpose(2,0,1)).float()
+    # ------
+
+    end_tensors_time = time.time()
+    tensors_time = end_tensors_time - start_tensors_time
+    
+    if(time_logs):
+            total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
+            prepareimage_time_percentage = getPercentage(prepareimage_time, total_time)
+            facedetector_time_percentage = getPercentage(facedetector_time, total_time)
+            bbox2point_time_percentage = getPercentage(bbox2point_time, total_time)
+            estimatetransform_time_percentage = getPercentage(estimatetransform_time, total_time)
+            warp_time_percentage = getPercentage(warp_time, total_time)
+            tensors_time_percentage = getPercentage(tensors_time, total_time)
+            print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+            print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+            print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+            print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+            print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+            print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+            print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+            print(f"++++++++++++")
+     
+    return {'image': image_tensor,
+            'imagename': 'frame',
+            'tform': tform_tensor,
+            'original_image': original_image_tensor,
+            'bbox': bbox,
+            'bbox2point': bbox2point}   
+
+def prepare_image(image):
+    image = np.array(image)
+    if len(image.shape) == 2:
+        image = image[:,:,None].repeat(1,1,3)
+    if len(image.shape) == 3 and image.shape[2] > 3:
+        image = image[:,:,:3]
+    
+    return image
+def detectFace(image):          
+    bbox, bbox_type = mediaPipeBboxDetection(image)
+    if len(bbox) < 4:
+        print('no face detected! return null')
+        # left = 0; right = h-1; top=0; bottom=w-1
+        return None
+    else:
+        left = bbox[0]; right=bbox[2]
+        top = bbox[1]; bottom=bbox[3]
+    return bbox_type, bbox, left, right, top, bottom             
+def bbox2pointCalc(bbox_type, left, right, top, bottom):  
+    scale=1.25
+    old_size, center = bbox2point(left, right, top, bottom, type=bbox_type)
+    size = int(old_size*scale)
+    src_pts = np.array([[center[0]-size/2, center[1]-size/2], [center[0] - size/2, center[1]+size/2], [center[0]+size/2, center[1]-size/2]])
+    return src_pts    
+def bbox2point(left, right, top, bottom, type='bbox'):
+        ''' bbox from detector and landmarks are different
+        '''
+        if type=='kpt68':
+            old_size = (right - left + bottom - top)/2*1.1
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0 ])
+        elif type=='bbox':
+            old_size = (right - left + bottom - top)/2
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0  + old_size*0.12])
+        else:
+            raise NotImplementedError
+        return old_size, center
+def estimateTransformCalc(src_pts,crop_size):
+    DST_PTS = np.array([[0,0], [0,crop_size - 1], [crop_size - 1, 0]])
+    tform = estimate_transform('similarity', src_pts, DST_PTS)
+    return tform
+def warpCalc(image,tform, crop_size):
+    image = image/255.
+    dst_image = warp(image, tform.inverse, output_shape=(crop_size, crop_size))
+    dst_image = dst_image.transpose(2,0,1)
+    return dst_image    
+def getPercentage(part,whole):
+    try:
+        result = part/whole * 100
+        return result
+    except ZeroDivisionError:
+        return 0
+def mediaPipeBboxDetection(image):
+
+    out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    # out = self.model.get_landmarks(image)
+    if out.multi_face_landmarks is None:
+        return [0], 'kpt68'
+    else:
+        face_landmarks = out.multi_face_landmarks[0]
+        kpt = np.array([(landmark.x, landmark.y) 
+                        for landmark in face_landmarks.landmark])
+        # Convert normalized coordinates to pixel values
+        kpt[:, 0] *= image.shape[1]  # Multiply x by image width
+        kpt[:, 1] *= image.shape[0]  # Multiply y by image height
+        # Compute the bounding box coordinates
+        left = np.min(kpt[:, 0])
+        right = np.max(kpt[:, 0])
+        top = np.min(kpt[:, 1])
+        bottom = np.max(kpt[:, 1])
+        bbox = [left, top, right, bottom]
+        return bbox, 'kpt68'
+
 
 
 if __name__ == "__main__":
