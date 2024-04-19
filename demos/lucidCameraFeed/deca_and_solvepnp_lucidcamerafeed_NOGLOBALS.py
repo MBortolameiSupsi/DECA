@@ -13,15 +13,15 @@
 # For comments or questions, please email us at deca@tue.mpg.de
 # For commercial licensing contact, please contact ps-license@tuebingen.mpg.de
 
-from asyncio.windows_events import NULL
 import os, sys
-from pickle import NONE
 import cv2
 import numpy as np
 from time import time
 import argparse
 import torch
 import math
+from skimage.transform import estimate_transform, warp, resize, rescale
+import mediapipe as mp
 
 import time
 from datetime import datetime
@@ -29,6 +29,8 @@ from datetime import datetime
 import open3d as o3d
 import yaml
 import csv
+from memory_profiler import profile
+from memory_profiler import memory_usage
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from decalib.deca import DECA
@@ -85,6 +87,9 @@ tmirror = np.array([[-1], [-1], [-1]])
 deca = None
 device = "cuda"
 
+mp_face_mesh = mp.solutions.face_mesh
+model = mp_face_mesh.FaceMesh()
+
 SAFE_COPY = False
 
 def main(args):
@@ -132,6 +137,8 @@ def main(args):
     while True:
         frame_time_current = time.time()
         acquisition_time_start = time.time()
+        # start_acquisition_memory = memory_usage(max_usage=True)
+
         if source["type"] == "camera":
             ret, input_image = camera.read()
             # If frame is read correctly, ret is True
@@ -151,12 +158,18 @@ def main(args):
                 print("All images processed (or No Input Image at all)")
                 return
         frame_counter +=1
+        
+        # end_acquisition_memory = memory_usage(max_usage=True)
+        # acquisition_memory = end_acquisition_memory - start_acquisition_memory
         acquisition_time_end = time.time()
         acquisition_time = acquisition_time_end - acquisition_time_start
         acquisition_times.append(acquisition_time)
-        print(f"acquistion time is {acquisition_time:.3f}")
+        print(f">>>> START FRAME {frame_counter}")
+        print(f"acquisition time is {acquisition_time:.3f}")
+        
         start_time = time.time()
-
+        # start_deca_and_solvepnp_memory = memory_usage(max_usage=True)
+ 
         # ----------------------------
         results = deca_and_solvepnp(input_image, detectors.MEDIAPIPE(), desired_eye_distance, camera_matrix,camera_dist_coeffs)
         success = results['success']
@@ -169,6 +182,8 @@ def main(args):
             rotation_vector = results['rotation_vector']
         # ----------------------------
 
+        # end_deca_and_solvepnp_memory = memory_usage(max_usage=True)
+        # deca_and_solvepnp_memory = end_deca_and_solvepnp_memory - start_deca_and_solvepnp_memory
         end_time = time.time()
         deca_and_solvepnp_time = end_time - start_time
         
@@ -182,6 +197,8 @@ def main(args):
         
         if success:
             start_visualize_time = time.time()
+            # start_visualize_memory = memory_usage(max_usage=True)
+            
             distance = np.linalg.norm(translation_vector)
             transform_matrix = compose_transform_matrix(rotation_vector, translation_vector)
             
@@ -196,6 +213,10 @@ def main(args):
                     camera_dist_coeffs)
             if visualizer2d:
                 image_with_landmarks_and_bbox = visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d, distance, cameraFeedOnly = False)
+            
+            # end_visualize_memory = memory_usage(max_usage=True)
+            # visualize_memory = end_visualize_memory - start_visualize_memory
+            
             end_visualize_time = time.time()
             visualize_time = end_visualize_time - start_visualize_time
 
@@ -217,7 +238,6 @@ def main(args):
             print(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
-            print(f"--------------------------")
         else:
             image_feed_only = visualize2d(input_image,None,None,None,None,cameraFeedOnly = True)
             # print(f"transform matrix {transform_matrix}")
@@ -225,20 +245,31 @@ def main(args):
         if source["type"] == "lucid-camera":
             cleanup_lucidcamera_buffer(lucid_frame_item)
         
+        # if time_logs:
+            # print(f"acquisition_memory is {acquisition_memory:.3f}")
+            # print(f"deca_and_solvepnp_memory is {deca_and_solvepnp_memory:.3f}")
+            # print(f"visualize_memory is {visualize_memory:.3f}")
+        
+        print(f"--------------------------")
         if(should_exit):
             avg_acquisition_time = sum(acquisition_times) / len(acquisition_times)
             print(f"AVG acquisition time {avg_acquisition_time:.2f}")
             print(f"AVG fps time {avg_fps:.2f}")
             return
 
-
+# @profile
 def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_matrix,camera_dist_coeffs):
     # global landmarks3D, vertices, landmarks2Dfullres
     # global translation_vector, rotation_vector, bbox
     # ---- ACQUISITION
     start_acquisition_time = time.time()
+    # start_acquisition_memory = memory_usage(max_usage=True)
     
-    imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
+    # imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
+    imagedata = create_camera_data(input_image)
+    
+    # end_acquisition_memory = memory_usage(max_usage=True)
+    # acquisition_memory = end_acquisition_memory - start_acquisition_memory
     end_acquisition_time = time.time()
     acquisition_time = end_acquisition_time - start_acquisition_time
     if(imagedata == None):
@@ -250,6 +281,7 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
     
     # ---- PREPARE DATA
     start_preparedata_time = time.time()
+    # start_preparedata_memory = memory_usage(max_usage=True)
 
     image = imagedata["image"].to(device)[None, ...]
     tform = imagedata["tform"][None, ...]
@@ -258,20 +290,26 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
     original_image = imagedata["original_image"][None, ...].to(device)
     _, image_height, image_width = imagedata["original_image"].shape
 
+    # end_preparedata_memory = memory_usage(max_usage=True)
+    # preparedata_memory = end_preparedata_memory - start_preparedata_memory
     end_preparedata_time = time.time()
     preparedata_time = end_preparedata_time - start_preparedata_time
     # ---- end PREPARE DATA
 
     # ---- ENCODING ----
     start_encoding_time = time.time()
+    # start_encoding_memory = memory_usage(max_usage=True)
 
     codedict = deca.encode(image)
 
+    # end_encoding_memory = memory_usage(max_usage=True)
+    # encoding_memory = end_encoding_memory - start_encoding_memory
     end_encoding_time = time.time()
     encoding_time = end_encoding_time - start_encoding_time
     
     # ---- DECODING ----
     start_decoding_time = time.time()
+    # start_decoding_memory = memory_usage(max_usage=True)
 
     opdict = deca.decode_fast(
         codedict,
@@ -279,11 +317,15 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
         tform=tform,
         full_res_landmarks2D=True,
     )
+    
+    # end_decoding_memory = memory_usage(max_usage=True)
+    # decoding_memory = end_decoding_memory - start_decoding_memory
     end_decoding_time = time.time()
     decoding_time = end_decoding_time - start_decoding_time
     
     # ---- LANDMARKS ----
     start_landmarks_time = time.time()
+    # start_landmarks_memory = memory_usage(max_usage=True)
 
     landmarks3D = opdict["landmarks3d_world"][0].cpu().numpy()[:, :3]
     landmarks3D, _ = scalePoints(landmarks3D, 39, 42, desired_eye_distance)
@@ -303,11 +345,15 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
     # scalePoints(vertices, desiredScalingFactor=scaling_factor)
     eye_distance_now = getDesiredEyeDistance(vertices, 3827, 3619)
     print(f"Vertices: After scaling to reach {desired_eye_distance}, distance is: {eye_distance_now}")
+    
+    # end_landmarks_memory = memory_usage(max_usage=True)
+    # landmarks_memory = end_landmarks_memory - start_landmarks_memory
     end_landmarks_time = time.time()
     landmarks_time = end_landmarks_time - start_landmarks_time
     
     # ---- SOLVEPNP ----
     start_solvepnp_time = time.time()
+    # start_solvepnp_memory = memory_usage(max_usage=True)
 
     success, rotation_vector, translation_vector = cv2.solvePnP(
         landmarks3D,
@@ -316,18 +362,21 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
         camera_matrix,
         camera_dist_coeffs,
     )
+    
+    # end_solvepnp_memory = memory_usage(max_usage=True)
+    # solvepnp_memory = end_solvepnp_memory - start_solvepnp_memory
     end_solvepnp_time = time.time()
     solvepnp_time = end_solvepnp_time - start_solvepnp_time
 
     #PRINT:
     if time_logs:
         total_time = acquisition_time + preparedata_time + encoding_time + decoding_time + landmarks_time + solvepnp_time
-        acquisition_time_percentage = get_percentage(acquisition_time, total_time)
-        preparedata_time_percentage = get_percentage(preparedata_time, total_time)
-        encoding_time_percentage = get_percentage(encoding_time, total_time)
-        decoding_time_percentage = get_percentage(decoding_time, total_time)
-        landmarks_time_percentage = get_percentage(landmarks_time, total_time)
-        solvepnp_time_percentage = get_percentage(solvepnp_time, total_time)
+        acquisition_time_percentage = getPercentage(acquisition_time, total_time)
+        preparedata_time_percentage = getPercentage(preparedata_time, total_time)
+        encoding_time_percentage = getPercentage(encoding_time, total_time)
+        decoding_time_percentage = getPercentage(decoding_time, total_time)
+        landmarks_time_percentage = getPercentage(landmarks_time, total_time)
+        solvepnp_time_percentage = getPercentage(solvepnp_time, total_time)
         print(f"--- TIMERS ---[{total_time:.3f}]")
         print(f"acquisition_time [{acquisition_time_percentage:.1f}%] {acquisition_time:.3f}")
         print(f"preparedata_time [{preparedata_time_percentage:.1f}%] {preparedata_time:.3f}")
@@ -335,6 +384,13 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
         print(f"decoding_time [{decoding_time_percentage:.1f}%] {decoding_time:.3f}")
         print(f"landmarks_time [{landmarks_time_percentage:.1f}%] {landmarks_time:.3f}")
         print(f"solvepnp_time [{solvepnp_time_percentage:.1f}%] {solvepnp_time:.3f}")
+        # print(f"--- MEMORY ---[{total_time:.3f}]")
+        # print(f"acquisition_memory {acquisition_memory:.3f}")
+        # print(f"preparedata_memory {preparedata_memory:.3f}")
+        # print(f"encoding_memory {encoding_memory:.3f}")
+        # print(f"decoding_memory {decoding_memory:.3f}")
+        # print(f"landmarks_memory {landmarks_memory:.3f}")
+        # print(f"solvepnp_memory {solvepnp_memory:.3f}")
     
     results = {
         'success': success,
@@ -347,7 +403,7 @@ def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_m
     }
     return results
 
-def get_percentage(part,whole):
+def getPercentage(part,whole):
     return part/whole * 100
 
 def visualize3d(head_mesh, deca_vertices, deca_rotation, deca_translation, camera_matrix,camera_dist_coeffs):
@@ -845,6 +901,156 @@ def on_press_q(e):
 #     print("KEY p")
 #     save_mesh_3d(head_mesh_to_save)
 #     save_img_2d(image_to_save,landmarks2d_to_save)
+
+def create_camera_data(image):
+    crop_size=224 
+
+    # Prepare Image
+    start_prepareimage_time = time.time()
+    # ------
+    image = prepare_image(image)
+    # ------    
+    end_prepareimage_time = time.time()
+    prepareimage_time = end_prepareimage_time - start_prepareimage_time
+    
+    # Detect Face
+    start_facedetector_time = time.time()
+    # ------
+    bbox_type, bbox, left, right, top, bottom = detectFace(image)
+    # ------
+    end_facedetector_time = time.time()
+    facedetector_time = end_facedetector_time - start_facedetector_time
+    
+    # Calc the src points
+    start_bbox2point_time = time.time()
+    # ------
+    src_pts = bbox2pointCalc(bbox_type, left, right, top, bottom)
+    # ------
+    end_bbox2point_time = time.time()
+    bbox2point_time = end_bbox2point_time - start_bbox2point_time
+    
+    # Calc the transform
+    start_estimatetransform_time = time.time()
+    # ------
+    tform = estimateTransformCalc(src_pts, crop_size)
+    # ------
+    end_estimatetransform_time = time.time()
+    estimatetransform_time = end_estimatetransform_time - start_estimatetransform_time
+
+    # Warp
+    start_warp_time = time.time()
+    # ------
+    dst_image = warpCalc(image, tform, crop_size)
+    # ------
+    end_warp_time = time.time()
+    warp_time = end_warp_time - start_warp_time
+    
+    # Prepare tensors
+    start_tensors_time = time.time()
+    # ------
+    image_tensor = torch.tensor(dst_image).float()
+    tform_tensor = torch.tensor(tform.params).float()
+    original_image_tensor = torch.tensor(image.transpose(2,0,1)).float()
+    # ------
+
+    end_tensors_time = time.time()
+    tensors_time = end_tensors_time - start_tensors_time
+    
+    if(time_logs):
+            total_time = prepareimage_time + facedetector_time + bbox2point_time + estimatetransform_time + warp_time + tensors_time
+            prepareimage_time_percentage = getPercentage(prepareimage_time, total_time)
+            facedetector_time_percentage = getPercentage(facedetector_time, total_time)
+            bbox2point_time_percentage = getPercentage(bbox2point_time, total_time)
+            estimatetransform_time_percentage = getPercentage(estimatetransform_time, total_time)
+            warp_time_percentage = getPercentage(warp_time, total_time)
+            tensors_time_percentage = getPercentage(tensors_time, total_time)
+            print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+            print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+            print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+            print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+            print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+            print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+            print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+            print(f"++++++++++++")
+     
+    return {'image': image_tensor,
+            'imagename': 'frame',
+            'tform': tform_tensor,
+            'original_image': original_image_tensor,
+            'bbox': bbox,
+            'bbox2point': bbox2point}   
+
+def prepare_image(image):
+    image = np.array(image)
+    if len(image.shape) == 2:
+        image = image[:,:,None].repeat(1,1,3)
+    if len(image.shape) == 3 and image.shape[2] > 3:
+        image = image[:,:,:3]
+    
+    return image
+def detectFace(image):          
+    bbox, bbox_type = mediaPipeBboxDetection(image)
+    if len(bbox) < 4:
+        print('no face detected! return null')
+        # left = 0; right = h-1; top=0; bottom=w-1
+        return None
+    else:
+        left = bbox[0]; right=bbox[2]
+        top = bbox[1]; bottom=bbox[3]
+    return bbox_type, bbox, left, right, top, bottom             
+def bbox2pointCalc(bbox_type, left, right, top, bottom):  
+    scale=1.25
+    old_size, center = bbox2point(left, right, top, bottom, type=bbox_type)
+    size = int(old_size*scale)
+    src_pts = np.array([[center[0]-size/2, center[1]-size/2], [center[0] - size/2, center[1]+size/2], [center[0]+size/2, center[1]-size/2]])
+    return src_pts    
+def bbox2point(left, right, top, bottom, type='bbox'):
+        ''' bbox from detector and landmarks are different
+        '''
+        if type=='kpt68':
+            old_size = (right - left + bottom - top)/2*1.1
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0 ])
+        elif type=='bbox':
+            old_size = (right - left + bottom - top)/2
+            center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0  + old_size*0.12])
+        else:
+            raise NotImplementedError
+        return old_size, center
+def estimateTransformCalc(src_pts,crop_size):
+    DST_PTS = np.array([[0,0], [0,crop_size - 1], [crop_size - 1, 0]])
+    tform = estimate_transform('similarity', src_pts, DST_PTS)
+    return tform
+def warpCalc(image,tform, crop_size):
+    image = image/255.
+    dst_image = warp(image, tform.inverse, output_shape=(crop_size, crop_size))
+    dst_image = dst_image.transpose(2,0,1)
+    return dst_image    
+def getPercentage(part,whole):
+    try:
+        result = part/whole * 100
+        return result
+    except ZeroDivisionError:
+        return 0
+def mediaPipeBboxDetection(image):
+
+    out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    # out = self.model.get_landmarks(image)
+    if out.multi_face_landmarks is None:
+        return [0], 'kpt68'
+    else:
+        face_landmarks = out.multi_face_landmarks[0]
+        kpt = np.array([(landmark.x, landmark.y) 
+                        for landmark in face_landmarks.landmark])
+        # Convert normalized coordinates to pixel values
+        kpt[:, 0] *= image.shape[1]  # Multiply x by image width
+        kpt[:, 1] *= image.shape[0]  # Multiply y by image height
+        # Compute the bounding box coordinates
+        left = np.min(kpt[:, 0])
+        right = np.max(kpt[:, 0])
+        top = np.min(kpt[:, 1])
+        bottom = np.max(kpt[:, 1])
+        bbox = [left, top, right, bottom]
+        return bbox, 'kpt68'
 
 
 def load_config():
