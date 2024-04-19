@@ -171,7 +171,7 @@ def main(args):
         # start_deca_and_solvepnp_memory = memory_usage(max_usage=True)
  
         # ----------------------------
-        results = deca_and_solvepnp(input_image, detectors.MEDIAPIPE(), desired_eye_distance, camera_matrix,camera_dist_coeffs)
+        results = deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_dist_coeffs)
         success = results['success']
         if success:
             landmarks3D = results['landmarks3D']
@@ -239,8 +239,8 @@ def main(args):
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
         else:
+            print(f"Image only")
             image_feed_only = visualize2d(input_image,None,None,None,None,cameraFeedOnly = True)
-            # print(f"transform matrix {transform_matrix}")
         # cleanup
         if source["type"] == "lucid-camera":
             cleanup_lucidcamera_buffer(lucid_frame_item)
@@ -258,7 +258,7 @@ def main(args):
             return
 
 # @profile
-def deca_and_solvepnp(input_image, face_detector, desired_eye_distance, camera_matrix,camera_dist_coeffs):
+def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_dist_coeffs):
     # global landmarks3D, vertices, landmarks2Dfullres
     # global translation_vector, rotation_vector, bbox
     # ---- ACQUISITION
@@ -916,6 +916,10 @@ def create_camera_data(image):
     # Detect Face
     start_facedetector_time = time.time()
     # ------
+    # results = detectFace(image)
+    # if results == None:
+    #     return None
+    # else: bbox_type, bbox, left, right, top, bottom = results
     bbox_type, bbox, left, right, top, bottom = detectFace(image)
     # ------
     end_facedetector_time = time.time()
