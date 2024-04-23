@@ -62,7 +62,7 @@ mirror_results = None
 apply_to_head_mesh = None
 
 save_vertices_rotated_and_translated = None
-save_solvepnp_rototranslation = None
+save_solvepnp_data = None
 save_mesh_expression_with_landmarks3d = None
 save_image_with_landmarks2d = None
 save_ear_points = None
@@ -216,7 +216,7 @@ def main(args):
                 save_img_2d()
             if save_image_with_landmarks2d and source["type"] == "folder":
                 save_mesh_3d()
-            if save_solvepnp_rototranslation:
+            if save_solvepnp_data:
                 save_solvepnp_transform()
             if save_ear_points:
                 saveEarPoints()
@@ -827,7 +827,7 @@ def load_config():
     global mirror_results, apply_to_head_mesh
     global save_mesh_expression_with_landmarks3d
     global save_image_with_landmarks2d
-    global save_solvepnp_rototranslation
+    global save_solvepnp_data
     global save_ear_points, csv_writer, ear_csv
     global time_logs
     
@@ -876,7 +876,7 @@ def load_config():
     
     save_mesh_expression_with_landmarks3d = output["save_mesh_expression_with_landmarks3d"]
     save_image_with_landmarks2d = output["save_image_with_landmarks2d"]
-    save_solvepnp_rototranslation = output["save_solvepnp_rototranslation"]
+    save_solvepnp_data = output["save_solvepnp_data"]
     save_ear_points = output["save_ear_points"]
     if save_ear_points:
         csv_path = os.path.join(output_folder, f"ear_trace.csv")   
