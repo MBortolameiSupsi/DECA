@@ -90,7 +90,7 @@ device = "cuda"
 mp_face_mesh = mp.solutions.face_mesh
 model = mp_face_mesh.FaceMesh()
 
-SAFE_COPY = False
+SAFE_COPY = True
 
 def main(args):
     global global_args, deca
@@ -150,9 +150,11 @@ def main(args):
             input_image = cv2.resize(lucid_frame, (camera_width, camera_height))
         elif source["type"] == "folder":
             if images_from_folder.__len__() > 0:
-                input_image = images_from_folder.pop(0)
+                current_image = images_from_folder.pop(0)
+                input_image = current_image[0]
+                input_image_name = current_image[1]
                 print(
-                    f">>>>>> input_image is {input_image.shape}, remaining {images_from_folder.__len__()}"
+                    f">>>>>> input_image {input_image_name} is {input_image.shape}, remaining {images_from_folder.__len__()}"
                 )
             else:
                 print("All images processed (or No Input Image at all)")
@@ -171,17 +173,24 @@ def main(args):
         # start_deca_and_solvepnp_memory = memory_usage(max_usage=True)
  
         # ----------------------------
+        results = None
+        landmarks2Dfullres = None
+        vertices = None
+        bbox = None
+        translation_vector = None
+        rotation_vector = None
+        
         results = deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_dist_coeffs)
         success = results['success']
         if success:
-            landmarks3D = results['landmarks3D']
+            # landmarks3D = results['landmarks3D']
             landmarks2Dfullres = results['landmarks2Dfullres']
             vertices = results['vertices']
             bbox = results['bbox']
             translation_vector = results['translation_vector']
             rotation_vector = results['rotation_vector']
         # ----------------------------
-
+        
         # end_deca_and_solvepnp_memory = memory_usage(max_usage=True)
         # deca_and_solvepnp_memory = end_deca_and_solvepnp_memory - start_deca_and_solvepnp_memory
         end_time = time.time()
@@ -201,6 +210,10 @@ def main(args):
             
             distance = np.linalg.norm(translation_vector)
             transform_matrix = compose_transform_matrix(rotation_vector, translation_vector)
+            #save early for debug
+            if save_solvepnp_rototranslation:
+                save_solvepnp_transform(transform_matrix)
+                save_landmarks(results, frame_counter)
             
             if visualizer3d:
                 # Notice: Head_mesh will have it's vertices updated by this method
@@ -220,14 +233,12 @@ def main(args):
             end_visualize_time = time.time()
             visualize_time = end_visualize_time - start_visualize_time
 
-            # if save_video_feed:
-            #     save_feed()
+            if save_video_feed:
+                save_feed(input_image, image_with_landmarks_and_bbox, frame_counter)
             if save_mesh_expression_with_landmarks3d and source["type"] == "folder":
                 save_mesh_3d(head_mesh_rotated_translated_mirrored)
             if save_image_with_landmarks2d and source["type"] == "folder":
-                save_img_2d(image_with_landmarks_and_bbox, frame_counter)
-            if save_solvepnp_rototranslation:
-                save_solvepnp_transform(transform_matrix)
+                save_img_2d(image_with_landmarks_and_bbox, frame_counter, input_image_name)
             if save_ear_points:
                 saveEarPoints(
                     ear_trace_mesh, 
@@ -466,7 +477,12 @@ def visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d,distance, cam
     
     image_with_landmarks_and_ears = draw_points(image_with_landmarks, ear_points_2d, 3, (255,0,0))
     image_with_bbox = draw_rect(image_with_landmarks_and_ears, bbox)
-    result_image = cv2.flip(image_with_bbox, 1)
+    
+    if(source["type"] == "folder"):
+        result_image = image_with_bbox
+    else:
+        result_image = cv2.flip(image_with_bbox, 1)
+
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     result_image = draw_text(result_image, text, "top-right")
     print(f"fps {fps}")
@@ -558,7 +574,7 @@ def save_mesh_3d(head_mesh):
         head_mesh,
     )
 
-def save_img_2d(input_image, frame_counter):
+def save_img_2d(input_image, frame_counter, input_image_name = None):
     if SAFE_COPY:
         image = np.copy(input_image)
     else:
@@ -566,13 +582,31 @@ def save_img_2d(input_image, frame_counter):
     # now = datetime.now()
     # This will give you time precise up to milliseconds
     # date_time = now.strftime("%Y%m%d_%H%M%S%f")[:17]  
-    video_snapshot_path = os.path.join(output_folder,f"video_snapshot_{frame_counter}.png")
+    if input_image_name is None:
+        image_path = os.path.join(output_folder,f"output_image_{frame_counter}.png")
+    else:
+        image_path = os.path.join(output_folder,f"output_image_{input_image_name}_{frame_counter}.png")
     # relative_path_original = os.path.join(output_folder,f"ORIGINAL_image_landmarks2d_{date_time}.png")
     # print(f"saving {date_time}")
-    cv2.imwrite(video_snapshot_path, image)
+    cv2.imwrite(image_path, image)
     # cv2.imwrite(relative_path_original, image_copy)
     # frame_with_landmarks = draw_points(image_copy, landmarks2Dfullres)
     # cv2.imwrite(relative_path, frame_with_landmarks)
+
+def save_feed(input_original_image, input_processed_image, frame_counter):
+    if SAFE_COPY:
+        original_image = np.copy(input_original_image)
+        processed_image = np.copy(input_processed_image)
+    else:
+        original_image = input_original_image
+        processed_image = input_processed_image
+        
+    original_image_path = os.path.join(output_folder,f"frame_{frame_counter}_original.png")
+    processed_image_path = os.path.join(output_folder,f"frame_{frame_counter}_processed.png")
+
+    original_image_flipped = cv2.flip(original_image, 1)
+    cv2.imwrite(original_image_path, original_image_flipped)
+    cv2.imwrite(processed_image_path, processed_image)
 
 def compose_transform_matrix(input_rotation_vector, input_translation_vector):
     transform_matrix = np.eye(4)
@@ -585,9 +619,32 @@ def compose_transform_matrix(input_rotation_vector, input_translation_vector):
     transform_matrix[:3, :3] = cv2.Rodrigues(rotation_vector)[0].T
     transform_matrix[:3, 3] = translation_vector.T
     return transform_matrix
-
+def save_landmarks(results, frame_counter):
+    landmarks2Dfullres = results['landmarks2Dfullres']
+    vertices = results['vertices']
+    bbox = results['bbox']
+    translation_vector = results['translation_vector']
+    rotation_vector = results['rotation_vector']
+    with open(output_folder+f"/landmarks2Dfullres.txt", 'a') as file:
+        file.write(f"\n -----{frame_counter}----- \n")
+        np.savetxt(file, landmarks2Dfullres, fmt='%.4f')
+    with open(output_folder+f"/vertices.txt", 'a') as file:
+        file.write(f"\n -----{frame_counter}----- \n")
+        np.savetxt(file, vertices, fmt='%.4f')
+    with open(output_folder+f"/bbox.txt", 'a') as file:
+        file.write(f"\n -----{frame_counter}----- \n")
+        np.savetxt(file, bbox, fmt='%.4f')
+    with open(output_folder+f"/translation_vector.txt", 'a') as file:
+        file.write(f"\n -----{frame_counter}----- \n")
+        np.savetxt(file, translation_vector, fmt='%.4f')
+    with open(output_folder+f"/rotation_vector.txt", 'a') as file:
+        file.write(f"\n -----{frame_counter}----- \n")
+        np.savetxt(file, rotation_vector, fmt='%.4f')
+    
+     
 def save_solvepnp_transform(transform_matrix):
-    with open(output_folder+f"/solvepnp_transform.txt", 'ab') as file:
+    with open(output_folder+f"/solvepnp_transform.txt", 'a') as file:
+        file.write(f"\n -------- \n")
         np.savetxt(file, transform_matrix)
 
 def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_translation):
@@ -853,9 +910,10 @@ def get_images_from_folder():
         file for file in all_files if file.lower().endswith(valid_extensions)
     ]
     images = [
-        cv2.imread(os.path.join(image_folder, image_name)) for image_name in image_names
+        (cv2.imread(os.path.join(image_folder, image_name)), image_name)
+       for image_name in image_names
     ]
-    print(f">>>>> got images {images.__len__()} {images}")
+    print(f">>>>> got images {images.__len__()}")
     return images
 
 def start_visualizer2d():
@@ -902,13 +960,14 @@ def on_press_q(e):
 #     save_mesh_3d(head_mesh_to_save)
 #     save_img_2d(image_to_save,landmarks2d_to_save)
 
-def create_camera_data(image):
+def create_camera_data(input_image):
     crop_size=224 
+    # crop_size=192 
 
     # Prepare Image
     start_prepareimage_time = time.time()
     # ------
-    image = prepare_image(image)
+    image = prepare_image(input_image)
     # ------    
     end_prepareimage_time = time.time()
     prepareimage_time = end_prepareimage_time - start_prepareimage_time
@@ -916,11 +975,18 @@ def create_camera_data(image):
     # Detect Face
     start_facedetector_time = time.time()
     # ------
-    # results = detectFace(image)
-    # if results == None:
-    #     return None
-    # else: bbox_type, bbox, left, right, top, bottom = results
-    bbox_type, bbox, left, right, top, bottom = detectFace(image)
+    bbox_type = None
+    bbox = None
+    left = None
+    right = None
+    top = None
+    bottom = None
+    results = None
+    results = detectFace(image)
+    if results == None:
+        return None
+    else: bbox_type, bbox, left, right, top, bottom = results
+    # bbox_type, bbox, left, right, top, bottom = detectFace(image)
     # ------
     end_facedetector_time = time.time()
     facedetector_time = end_facedetector_time - start_facedetector_time
@@ -984,15 +1050,24 @@ def create_camera_data(image):
             'bbox': bbox,
             'bbox2point': bbox2point}   
 
-def prepare_image(image):
-    image = np.array(image)
+def prepare_image(input_image):
+    if SAFE_COPY:
+        image = np.array(np.copy(input_image))
+    else:
+        image = np.array(image)
+
     if len(image.shape) == 2:
         image = image[:,:,None].repeat(1,1,3)
     if len(image.shape) == 3 and image.shape[2] > 3:
         image = image[:,:,:3]
     
     return image
-def detectFace(image):          
+def detectFace(input_image):
+    if SAFE_COPY:
+        image = np.array(np.copy(input_image))
+    else:
+        image = np.array(image)
+
     bbox, bbox_type = mediaPipeBboxDetection(image)
     if len(bbox) < 4:
         print('no face detected! return null')
@@ -1036,10 +1111,12 @@ def getPercentage(part,whole):
     except ZeroDivisionError:
         return 0
 def mediaPipeBboxDetection(image):
-
+    # mp_face_mesh = mp.solutions.face_mesh
+    model = mp_face_mesh.FaceMesh()
     out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     # out = self.model.get_landmarks(image)
     if out.multi_face_landmarks is None:
+        out = None
         return [0], 'kpt68'
     else:
         face_landmarks = out.multi_face_landmarks[0]
@@ -1107,7 +1184,7 @@ def load_config():
     if source["type"] == "camera":
         camera_index = source["camera_index"]
     elif source["type"] == "folder":
-        image_folder = source["folder"]
+        image_folder = os.path.join(script_dir, source["folder"])
 
     output = config["output"]    
     output_folder = os.path.join(script_dir, output["folder"])
