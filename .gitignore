@@ -53,3 +53,5 @@ internal
 
 *.vs
 data/Readme.pdf
+demos/lucidCameraFeed/old
+demos/lucidCameraFeed/source_images
