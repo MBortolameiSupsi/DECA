@@ -23,7 +23,7 @@ visualize:
 output:
     folder: "./results"    
     save_ear_points: True
-    save_solvepnp_rototranslation: False
+    save_solvepnp_data: True
     # the following works only in when source type is folder
     # otherwise it would save a mesh+img for each frame from the webcam
     # Note: if you press P while focus on the 3D visualizer window, 
