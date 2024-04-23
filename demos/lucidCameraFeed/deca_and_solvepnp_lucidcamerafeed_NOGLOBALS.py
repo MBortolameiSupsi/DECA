@@ -58,12 +58,13 @@ output_folder = None
 visualizer2d = None
 visualizer2d_width = None
 visualizer2d_height = None
-save_solvepnp_rototranslation = None
+save_solvepnp_data = None
 save_mesh_expression_with_landmarks3d = None
 save_image_with_landmarks2d = None
 save_ear_points = None
 ear_csv = None
 csv_writer = None
+logs_txt = None
 
 save_video_feed = None
 
@@ -88,7 +89,20 @@ deca = None
 device = "cuda"
 
 mp_face_mesh = mp.solutions.face_mesh
-model = mp_face_mesh.FaceMesh()
+# model = mp_face_mesh.FaceMesh()
+model = mp_face_mesh.FaceMesh(
+        max_num_faces=1,
+        refine_landmarks=True,
+        # min_detection_confidence=0.7,
+        # min_tracking_confidence=0.7   
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5
+        )
+mp_face_detection = mp.solutions.face_detection
+face_detection = mp_face_detection.FaceDetection(
+    model_selection=1,  # 0 for short-range model, suitable for most cases
+    min_detection_confidence=0.5)
+
 
 SAFE_COPY = True
 
@@ -143,7 +157,7 @@ def main(args):
             ret, input_image = camera.read()
             # If frame is read correctly, ret is True
             if not ret:
-                print("Error: Can't receive frame (stream end?). Exiting ...")
+                myPrint("Error: Can't receive frame (stream end?). Exiting ...")
                 break
         elif source["type"] == "lucid-camera":
             lucid_frame,lucid_frame_item = get_lucid_frame(num_channels)
@@ -153,11 +167,11 @@ def main(args):
                 current_image = images_from_folder.pop(0)
                 input_image = current_image[0]
                 input_image_name = current_image[1]
-                print(
+                myPrint(
                     f">>>>>> input_image {input_image_name} is {input_image.shape}, remaining {images_from_folder.__len__()}"
                 )
             else:
-                print("All images processed (or No Input Image at all)")
+                myPrint("All images processed (or No Input Image at all)")
                 return
         frame_counter +=1
         
@@ -166,8 +180,8 @@ def main(args):
         acquisition_time_end = time.time()
         acquisition_time = acquisition_time_end - acquisition_time_start
         acquisition_times.append(acquisition_time)
-        print(f">>>> START FRAME {frame_counter}")
-        print(f"acquisition time is {acquisition_time:.3f}")
+        myPrint(f">>>> START FRAME {frame_counter}")
+        myPrint(f"acquisition from source feed - time is {acquisition_time:.3f}")
         
         start_time = time.time()
         # start_deca_and_solvepnp_memory = memory_usage(max_usage=True)
@@ -211,7 +225,7 @@ def main(args):
             distance = np.linalg.norm(translation_vector)
             transform_matrix = compose_transform_matrix(rotation_vector, translation_vector)
             #save early for debug
-            if save_solvepnp_rototranslation:
+            if save_solvepnp_data:
                 save_solvepnp_transform(transform_matrix)
                 save_landmarks(results, frame_counter)
             
@@ -246,26 +260,26 @@ def main(args):
                     deca_vertices = vertices,
                     deca_rotation = rotation_vector, 
                     deca_translation = translation_vector)
-            print(
+            myPrint(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
         else:
-            print(f"Image only")
+            myPrint(f"Image only")
             image_feed_only = visualize2d(input_image,None,None,None,None,cameraFeedOnly = True)
         # cleanup
         if source["type"] == "lucid-camera":
             cleanup_lucidcamera_buffer(lucid_frame_item)
         
         # if time_logs:
-            # print(f"acquisition_memory is {acquisition_memory:.3f}")
-            # print(f"deca_and_solvepnp_memory is {deca_and_solvepnp_memory:.3f}")
-            # print(f"visualize_memory is {visualize_memory:.3f}")
+            # myPrint(f"acquisition_memory is {acquisition_memory:.3f}")
+            # myPrint(f"deca_and_solvepnp_memory is {deca_and_solvepnp_memory:.3f}")
+            # myPrint(f"visualize_memory is {visualize_memory:.3f}")
         
-        print(f"--------------------------")
+        myPrint(f"--------------------------")
         if(should_exit):
             avg_acquisition_time = sum(acquisition_times) / len(acquisition_times)
-            print(f"AVG acquisition time {avg_acquisition_time:.2f}")
-            print(f"AVG fps time {avg_fps:.2f}")
+            myPrint(f"AVG acquisition from source time {avg_acquisition_time:.2f}")
+            myPrint(f"AVG fps time {avg_fps:.2f}")
             return
 
 # @profile
@@ -276,7 +290,7 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
     start_acquisition_time = time.time()
     # start_acquisition_memory = memory_usage(max_usage=True)
     
-    # imagedata = datasets.CameraData(input_image, face_detector, time_logs=time_logs)[0]
+    # imagedata = datasets.CameraData(input_image, face_detector = detectors.FAN(), time_logs=time_logs)[0]
     imagedata = create_camera_data(input_image)
     
     # end_acquisition_memory = memory_usage(max_usage=True)
@@ -284,7 +298,7 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
     end_acquisition_time = time.time()
     acquisition_time = end_acquisition_time - start_acquisition_time
     if(imagedata == None):
-        print("NO FACE!")
+        myPrint("NO FACE!")
         results = {'success': False}
         return results
         
@@ -342,7 +356,7 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
     landmarks3D, _ = scalePoints(landmarks3D, 39, 42, desired_eye_distance)
     landmarks3D = np.ascontiguousarray(landmarks3D, dtype=np.float32)
     eye_distance_now1 = getDesiredEyeDistance(landmarks3D, 39, 42)
-    print(f"Landmarks3d : After scaling to reach {desired_eye_distance}, distance is: {eye_distance_now1}")
+    myPrint(f"Landmarks3d : After scaling to reach {desired_eye_distance}, distance is: {eye_distance_now1}")
 
     landmarks2Dfullres = opdict["landmarks2d_full_res"][0]
     landmarks2Dfullres = np.ascontiguousarray(landmarks2Dfullres, dtype=np.float32)
@@ -355,7 +369,7 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
     
     # scalePoints(vertices, desiredScalingFactor=scaling_factor)
     eye_distance_now = getDesiredEyeDistance(vertices, 3827, 3619)
-    print(f"Vertices: After scaling to reach {desired_eye_distance}, distance is: {eye_distance_now}")
+    myPrint(f"Vertices: After scaling to reach {desired_eye_distance}, distance is: {eye_distance_now}")
     
     # end_landmarks_memory = memory_usage(max_usage=True)
     # landmarks_memory = end_landmarks_memory - start_landmarks_memory
@@ -388,20 +402,20 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
         decoding_time_percentage = getPercentage(decoding_time, total_time)
         landmarks_time_percentage = getPercentage(landmarks_time, total_time)
         solvepnp_time_percentage = getPercentage(solvepnp_time, total_time)
-        print(f"--- TIMERS ---[{total_time:.3f}]")
-        print(f"acquisition_time [{acquisition_time_percentage:.1f}%] {acquisition_time:.3f}")
-        print(f"preparedata_time [{preparedata_time_percentage:.1f}%] {preparedata_time:.3f}")
-        print(f"encoding_time [{encoding_time_percentage:.1f}%] {encoding_time:.3f}")
-        print(f"decoding_time [{decoding_time_percentage:.1f}%] {decoding_time:.3f}")
-        print(f"landmarks_time [{landmarks_time_percentage:.1f}%] {landmarks_time:.3f}")
-        print(f"solvepnp_time [{solvepnp_time_percentage:.1f}%] {solvepnp_time:.3f}")
-        # print(f"--- MEMORY ---[{total_time:.3f}]")
-        # print(f"acquisition_memory {acquisition_memory:.3f}")
-        # print(f"preparedata_memory {preparedata_memory:.3f}")
-        # print(f"encoding_memory {encoding_memory:.3f}")
-        # print(f"decoding_memory {decoding_memory:.3f}")
-        # print(f"landmarks_memory {landmarks_memory:.3f}")
-        # print(f"solvepnp_memory {solvepnp_memory:.3f}")
+        myPrint(f"--- TIMERS ---[{total_time:.3f}]")
+        myPrint(f"bbox and transform  [{acquisition_time_percentage:.1f}%] {acquisition_time:.3f}")
+        myPrint(f"preparedata_time [{preparedata_time_percentage:.1f}%] {preparedata_time:.3f}")
+        myPrint(f"encoding_time [{encoding_time_percentage:.1f}%] {encoding_time:.3f}")
+        myPrint(f"decoding_time [{decoding_time_percentage:.1f}%] {decoding_time:.3f}")
+        myPrint(f"landmarks_time [{landmarks_time_percentage:.1f}%] {landmarks_time:.3f}")
+        myPrint(f"solvepnp_time [{solvepnp_time_percentage:.1f}%] {solvepnp_time:.3f}")
+        # myPrint(f"--- MEMORY ---[{total_time:.3f}]")
+        # myPrint(f"acquisition_memory {acquisition_memory:.3f}")
+        # myPrint(f"preparedata_memory {preparedata_memory:.3f}")
+        # myPrint(f"encoding_memory {encoding_memory:.3f}")
+        # myPrint(f"decoding_memory {decoding_memory:.3f}")
+        # myPrint(f"landmarks_memory {landmarks_memory:.3f}")
+        # myPrint(f"solvepnp_memory {solvepnp_memory:.3f}")
     
     results = {
         'success': success,
@@ -463,14 +477,14 @@ def visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d,distance, cam
         image = input_image
         
     if cameraFeedOnly:
-        print("showing feed only")
+        myPrint("showing feed only")
         flipped_image = cv2.flip(image, 1)
         cv2.imshow(camera_window_name, flipped_image)
         cv2.waitKey(1)
         return;
         
     # landmarksFlipped = cv2.flip(landmarks2Dfullres, 1)
-    # print(f"Visualize2d landmarks2Dfullres.shape {landmarks2Dfullres.shape} -  input_image.shape {input_image.shape}")
+    # myPrint(f"Visualize2d landmarks2Dfullres.shape {landmarks2Dfullres.shape} -  input_image.shape {input_image.shape}")
     # input_image = draw_points(input_image, landmarks2Dfullres)
 
     image_with_landmarks = draw_points(image, landmarks2Dfullres)
@@ -485,10 +499,10 @@ def visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d,distance, cam
 
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
     result_image = draw_text(result_image, text, "top-right")
-    print(f"fps {fps}")
+    myPrint(f"fps {fps}")
     result_image = draw_text(result_image, fps, "top-left")
 
-    print(f"Visualize2d input_image.shape {result_image.shape}")
+    myPrint(f"Visualize2d input_image.shape {result_image.shape}")
     cv2.imshow(camera_window_name, result_image)
     return result_image
 
@@ -517,7 +531,7 @@ def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaRef
             vertices = deca_vertices
         # vertices contains the result of DECA
         desired_eye_distance = getDesiredEyeDistance(vertices, 3827, 3619)
-        print(f"vertices now with eye distance at {desired_eye_distance}")
+        myPrint(f"vertices now with eye distance at {desired_eye_distance}")
         head_mesh_vertices = np.asarray(vertices)
     else:
         #head_mesh at this point has been rotated and mirrored
@@ -587,7 +601,7 @@ def save_img_2d(input_image, frame_counter, input_image_name = None):
     else:
         image_path = os.path.join(output_folder,f"output_image_{input_image_name}_{frame_counter}.png")
     # relative_path_original = os.path.join(output_folder,f"ORIGINAL_image_landmarks2d_{date_time}.png")
-    # print(f"saving {date_time}")
+    # myPrint(f"saving {date_time}")
     cv2.imwrite(image_path, image)
     # cv2.imwrite(relative_path_original, image_copy)
     # frame_with_landmarks = draw_points(image_copy, landmarks2Dfullres)
@@ -696,7 +710,7 @@ def draw_points(input_image, input_point_list, radius=2, color=(0, 0, 255)):
         point_list = input_point_list
 
     for point in point_list:
-        # print(f"draw_points of point {point}")
+        # myPrint(f"draw_points of point {point}")
         x, y = int(round(point[0])), int(round(point[1]))
         cv2.circle(image, (x, y), radius=radius, color=color, thickness=-1)
     return image
@@ -719,7 +733,7 @@ def scalePoints(
     if fromPointIndex != None and toPointIndex != None:
         currentEyeDistance = math.dist(points[fromPointIndex], points[toPointIndex])
         scalingFactor = desiredDistance / currentEyeDistance
-        # print(f"SCALING - initial distance was {currentEyeDistance} - desired is {desiredDistance} : scalingFactor {scalingFactor}")
+        # myPrint(f"SCALING - initial distance was {currentEyeDistance} - desired is {desiredDistance} : scalingFactor {scalingFactor}")
         points *= scalingFactor
     elif desiredScalingFactor != None:
         points *= desiredScalingFactor
@@ -810,7 +824,7 @@ def load_head():
     # head mesh is already perfect scale. we save eye distance
     # to scale landmarks later on
     desired_eye_distance = getDesiredEyeDistance(vertices, 3827, 3619)
-    print(f"Desired Eye distance is {desired_eye_distance}")
+    myPrint(f"Desired Eye distance is {desired_eye_distance}")
     return head_mesh, desired_eye_distance
 def start_webcam():
     global camera
@@ -821,7 +835,7 @@ def start_webcam():
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
 
     if not camera.isOpened():
-        print("Error: Could not open video stream.")
+        myPrint("Error: Could not open video stream.")
         exit()
 def start_lucid_camera():
     global lucidCamera
@@ -862,16 +876,16 @@ def create_devices_with_tries():
 	while tries < tries_max:  # Wait for device for 60 seconds
 		devices = system.create_device()
 		if not devices:
-			print(
+			myPrint(
 				f'Try {tries+1} of {tries_max}: waiting for {sleep_time_secs} '
 				f'secs for a device to be connected!')
 			for sec_count in range(sleep_time_secs):
 				time.sleep(1)
-				print(f'{sec_count + 1 } seconds passed ',
+				myPrint(f'{sec_count + 1 } seconds passed ',
 					'.' * sec_count, end='\r')
 			tries += 1
 		else:
-			print(f'Created {len(devices)} device(s)')
+			myPrint(f'Created {len(devices)} device(s)')
 			return devices
 	else:
 		raise Exception(f'No device found! Please connect a device and run '
@@ -913,7 +927,7 @@ def get_images_from_folder():
         (cv2.imread(os.path.join(image_folder, image_name)), image_name)
        for image_name in image_names
     ]
-    print(f">>>>> got images {images.__len__()}")
+    myPrint(f">>>>> got images {images.__len__()}")
     return images
 
 def start_visualizer2d():
@@ -947,7 +961,7 @@ def stop_lucid_camera():
 
 def on_press_q(e):
     global should_exit
-    print("KEY q")
+    myPrint("KEY q")
     should_exit = True
     stop_visualizer3d()
     if(source["type"] == "lucid-camera"):
@@ -956,7 +970,7 @@ def on_press_q(e):
         stop_webcam()
         
 # def on_press_p(image_to_save,landmarks2d_to_save, head_mesh_to_save):
-#     print("KEY p")
+#     myPrint("KEY p")
 #     save_mesh_3d(head_mesh_to_save)
 #     save_img_2d(image_to_save,landmarks2d_to_save)
 
@@ -1034,14 +1048,14 @@ def create_camera_data(input_image):
             estimatetransform_time_percentage = getPercentage(estimatetransform_time, total_time)
             warp_time_percentage = getPercentage(warp_time, total_time)
             tensors_time_percentage = getPercentage(tensors_time, total_time)
-            print(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
-            print(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
-            print(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
-            print(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
-            print(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
-            print(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
-            print(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
-            print(f"++++++++++++")
+            myPrint(f"++++++++ datasets TIMERS ---[{total_time:.3f}]")
+            myPrint(f"++++++++ prepareimage_time [{prepareimage_time_percentage:.1f}%] {prepareimage_time:.3f}")
+            myPrint(f"++++++++ facedetector_time [{facedetector_time_percentage:.1f}%] {facedetector_time:.3f}")
+            myPrint(f"++++++++ bbox2point_time [{bbox2point_time_percentage:.1f}%] {bbox2point_time:.3f}")
+            myPrint(f"++++++++ estimatetransform_time [{estimatetransform_time_percentage:.1f}%] {estimatetransform_time:.3f}")
+            myPrint(f"++++++++ warp_time [{warp_time_percentage:.1f}%] {warp_time:.3f}")
+            myPrint(f"++++++++ tensors_time [{tensors_time_percentage:.1f}%] {tensors_time:.3f}")   
+            myPrint(f"++++++++++++")
      
     return {'image': image_tensor,
             'imagename': 'frame',
@@ -1068,10 +1082,11 @@ def detectFace(input_image):
     else:
         image = np.array(image)
 
-    bbox, bbox_type = mediaPipeBboxDetection(image)
-    if len(bbox) < 4:
-        print('no face detected! return null')
-        # left = 0; right = h-1; top=0; bottom=w-1
+    # bbox, bbox_type = mediaPipeFaceMeshDetectionOriginal(image)
+    # bbox, bbox_type = mediaPipeFaceMeshDetection(image)
+    bbox, bbox_type = mediaPipeFaceDetection(image)
+    if bbox is None:
+        myPrint('no face detected! return null')
         return None
     else:
         left = bbox[0]; right=bbox[2]
@@ -1110,14 +1125,14 @@ def getPercentage(part,whole):
         return result
     except ZeroDivisionError:
         return 0
-def mediaPipeBboxDetection(image):
+def mediaPipeFaceMeshDetectionOriginal(image):
     # mp_face_mesh = mp.solutions.face_mesh
     model = mp_face_mesh.FaceMesh()
     out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     # out = self.model.get_landmarks(image)
     if out.multi_face_landmarks is None:
         out = None
-        return [0], 'kpt68'
+        return None, None
     else:
         face_landmarks = out.multi_face_landmarks[0]
         kpt = np.array([(landmark.x, landmark.y) 
@@ -1132,8 +1147,55 @@ def mediaPipeBboxDetection(image):
         bottom = np.max(kpt[:, 1])
         bbox = [left, top, right, bottom]
         return bbox, 'kpt68'
+    
+def mediaPipeFaceMeshDetection(image):
+    # try using code from Mario's implementation
 
+    # model = mp_face_mesh.FaceMesh(
+    #     max_num_faces=1,
+    #     refine_landmarks=True,
+    #     min_detection_confidence=0.7,
+    #     min_tracking_confidence=0.7
+    #     )
+    h,w = image.shape[:2]
+    # out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    out = model.process(image[:,:,::-1])
+    if out.multi_face_landmarks:
+        face_landmarks = out.multi_face_landmarks[0]
+        pts = np.array([(pt.x * w, pt.y * h)
+                        for pt in face_landmarks.landmark],
+                       dtype=np.float64)
+        min_coords = pts.min(axis=0)
+        max_coords = pts.max(axis=0)
+        bbox = [
+            min_coords[0],  # left
+            min_coords[1],  # top
+            max_coords[0],  # right
+            max_coords[1]   # bottom
+        ]
+        bbox = np.round(bbox).astype(np.int32)
+        return bbox, 'kpt68'
+    else:
+        out = None
+        return None, None
 
+def mediaPipeFaceDetection(image):
+    # try using face detector instead of face mesh
+    h,w = image.shape[:2]
+    out = face_detection.process(image)
+    if out.detections:
+        face_detected = out.detections[0]
+        found_bbox = face_detected.location_data.relative_bounding_box
+        xmin = int(found_bbox.xmin * w)
+        ymin = int(found_bbox.ymin * h)
+        width = int(found_bbox.width * w)
+        height = int(found_bbox.height * h)
+        bbox = [xmin, ymin, xmin + width, ymin + height]
+        return bbox, 'kpt68'
+    else:
+        out = None
+        return None, None
+        
 def load_config():
     global camera_matrix, camera_dist_coeffs
     global camera_width, camera_height
@@ -1143,17 +1205,31 @@ def load_config():
     global visualizer2d_height, visualizer2d_width
     global save_mesh_expression_with_landmarks3d
     global save_image_with_landmarks2d
-    global save_solvepnp_rototranslation
+    global save_solvepnp_data
     global save_video_feed
     global save_ear_points, csv_writer, ear_csv
-    global time_logs
+    global time_logs, logs_txt
     
+        
     with open(global_args.config, "r") as stream:
         try:
             config = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
             return
+        
+    output = config["output"]    
+    output_folder = os.path.join(script_dir, output["folder"])
+    # Check if the directory exists, if not, create it
+    os.makedirs(output_folder, exist_ok=True)
+    # save_logs = output["save_logs"]
+    save_logs = True
+    if save_logs:
+        logs_txt = open(output_folder+f"/logs.txt", 'a')
+        print(f"saving logs to {logs_txt}")
+        print("writing")
+        logs_txt.write(f"\n -----LOGS----- \n")
+        print("done")
 
     camera = config["camera"]
     camera_width = camera["capture_resolution_width"]
@@ -1167,33 +1243,28 @@ def load_config():
                 camera_data["dist_coeffs"], dtype=np.float32
             )
         else:
-            print("ERROR fetching camera data")
+            myPrint("ERROR fetching camera data")
             return
     else:
-        print("ERROR no camera data specified")
+        myPrint("ERROR no camera data specified")
         return
-    print(
-        f"\n LOADED camera_matrix {camera_calibration_data}",
-        camera_matrix,
-        "\n dist_coeffs",
-        camera_dist_coeffs,
-        f"\n w:{camera_width} h:{camera_height}",
-    )
-
+    myPrint(
+        f"\n LOADED camera_matrix {camera_calibration_data} - "
+        f"\n camera_matrix {camera_matrix} "
+        f"\n dist_coeffs {camera_dist_coeffs} "
+        f"\n w:{camera_width} h:{camera_height}"
+)
     source = config["source"]
     if source["type"] == "camera":
         camera_index = source["camera_index"]
     elif source["type"] == "folder":
         image_folder = os.path.join(script_dir, source["folder"])
 
-    output = config["output"]    
-    output_folder = os.path.join(script_dir, output["folder"])
-    # Check if the directory exists, if not, create it
-    os.makedirs(output_folder, exist_ok=True)
+
     
     save_mesh_expression_with_landmarks3d = output["save_mesh_expression_with_landmarks3d"]
     save_image_with_landmarks2d = output["save_image_with_landmarks2d"]
-    save_solvepnp_rototranslation = output["save_solvepnp_rototranslation"]
+    save_solvepnp_data = output["save_solvepnp_data"]
     save_video_feed = output["save_video_feed"]
     save_ear_points = output["save_ear_points"]
     if save_ear_points:
@@ -1213,7 +1284,12 @@ def load_config():
     visualizer2d_width = visualize["visualizer2d_width"]
     visualizer2d_height = visualize["visualizer2d_height"]
     visualizer3d = visualize["visualizer3d"]
+    
 
+
+def myPrint(txt):
+    logs_txt.write(f"\n{txt}")
+    print(f"{txt}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DECA + SolvePnP")
