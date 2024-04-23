@@ -1,18 +1,18 @@
 head_mesh: "./head_template_centered_scaled.ply"
 source:
-    # type: "lucid-camera" 
-    type: "camera" 
+    type: "lucid-camera" 
+    # type: "camera" 
     # type: "folder" 
     camera_index: 0
     # folder: "./source_images"
     # folder: "./examples_webcam_640_2"
 
 camera:
-    # calibration_data: "./calibration_data_lucid_finalOptic_640.npz"
-    calibration_data: "./calibration_data_webcam_side_640_2.npz"
+    calibration_data: "./calibration_data_lucid_finalOptic_640.npz"
+    # calibration_data: "./calibration_data_webcam_side_640_2.npz"
     capture_resolution_width: 640
-    capture_resolution_height: 360
-    # capture_resolution_height: 480
+    # capture_resolution_height: 360
+    capture_resolution_height: 480
 
 visualize:
     visualizer2d: True
@@ -31,4 +31,4 @@ output:
     save_mesh_expression_with_landmarks3d: True
     save_image_with_landmarks2d: True
     time_logs: True
-    save_video_feed: True
+    save_video_feed: False

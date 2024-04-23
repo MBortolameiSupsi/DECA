@@ -1,10 +1,10 @@
 head_mesh: "./head_template_centered_scaled.ply"
 source:
     # type: "lucid-camera" 
-    type: "camera" 
-    # type: "folder" 
+    # type: "camera" 
+    type: "folder" 
     camera_index: 0
-    # folder: "./source_images"
+    folder: "./source_images"
     # folder: "./examples_webcam_640_2"
 
 camera:
@@ -15,6 +15,7 @@ camera:
     # capture_resolution_height: 480
 
 visualize:
+    # Note: do not disable. I need a refactor to make app work without visualizing
     visualizer2d: True
     visualizer2d_width: 800
     visualizer2d_height: 800
@@ -22,13 +23,13 @@ visualize:
 
 output:
     folder: "./results"    
-    save_ear_points: True
-    save_solvepnp_rototranslation: False
+    save_ear_points: False
+    save_solvepnp_rototranslation: True
     # the following works only in when source type is folder
     # otherwise it would save a mesh+img for each frame from the webcam
     # Note: if you press P while focus on the 3D visualizer window, 
     # you'll save a snapshot of mesh+img
-    save_mesh_expression_with_landmarks3d: True
+    save_mesh_expression_with_landmarks3d: False
     save_image_with_landmarks2d: True
+    save_video_feed: False
     time_logs: True
-    save_video_feed: True
