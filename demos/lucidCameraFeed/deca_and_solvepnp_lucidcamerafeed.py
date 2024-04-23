@@ -911,7 +911,10 @@ def create_camera_data(image):
     # Detect Face
     start_facedetector_time = time.time()
     # ------
-    bbox_type, bbox, left, right, top, bottom = detectFace(image)
+    results = detectFace(image)
+    if results == None:
+        return None
+    else: bbox_type, bbox, left, right, top, bottom = results
     # ------
     end_facedetector_time = time.time()
     facedetector_time = end_facedetector_time - start_facedetector_time
@@ -1027,7 +1030,7 @@ def getPercentage(part,whole):
     except ZeroDivisionError:
         return 0
 def mediaPipeBboxDetection(image):
-
+    model = mp_face_mesh.FaceMesh()
     out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     # out = self.model.get_landmarks(image)
     if out.multi_face_landmarks is None:
