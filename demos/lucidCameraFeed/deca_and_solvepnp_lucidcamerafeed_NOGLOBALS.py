@@ -65,6 +65,7 @@ save_ear_points = None
 ear_csv = None
 csv_writer = None
 logs_txt = None
+images_txt = None
 
 save_video_feed = None
 
@@ -175,6 +176,8 @@ def main(args):
                 return
         frame_counter +=1
         
+        images_txt.write(f"\n ---- frame {frame_counter} --- \n {input_image} ")
+        images_txt.flush()
         # end_acquisition_memory = memory_usage(max_usage=True)
         # acquisition_memory = end_acquisition_memory - start_acquisition_memory
         acquisition_time_end = time.time()
@@ -239,7 +242,7 @@ def main(args):
                     camera_matrix,
                     camera_dist_coeffs)
             if visualizer2d:
-                image_with_landmarks_and_bbox = visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d, distance, cameraFeedOnly = False)
+                image_with_landmarks_and_bbox_flipped, image_with_landmarks_and_bbox_not_flipped = visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d, distance, cameraFeedOnly = False)
             
             # end_visualize_memory = memory_usage(max_usage=True)
             # visualize_memory = end_visualize_memory - start_visualize_memory
@@ -248,11 +251,11 @@ def main(args):
             visualize_time = end_visualize_time - start_visualize_time
 
             if save_video_feed:
-                save_feed(input_image, image_with_landmarks_and_bbox, frame_counter)
+                save_feed(input_image, image_with_landmarks_and_bbox_not_flipped, frame_counter)
             if save_mesh_expression_with_landmarks3d and source["type"] == "folder":
                 save_mesh_3d(head_mesh_rotated_translated_mirrored)
             if save_image_with_landmarks2d and source["type"] == "folder":
-                save_img_2d(image_with_landmarks_and_bbox, frame_counter, input_image_name)
+                save_img_2d(image_with_landmarks_and_bbox_not_flipped, frame_counter, input_image_name)
             if save_ear_points:
                 saveEarPoints(
                     ear_trace_mesh, 
@@ -492,19 +495,16 @@ def visualize2d(input_image,landmarks2Dfullres,bbox, ear_points_2d,distance, cam
     image_with_landmarks_and_ears = draw_points(image_with_landmarks, ear_points_2d, 3, (255,0,0))
     image_with_bbox = draw_rect(image_with_landmarks_and_ears, bbox)
     
-    if(source["type"] == "folder"):
-        result_image = image_with_bbox
-    else:
-        result_image = cv2.flip(image_with_bbox, 1)
+    flipped_image_with_bbox = cv2.flip(image_with_bbox, 1)
 
     text = f"Dist. cm: {distance:.3f} \n Time s:{deca_and_solvepnp_time:.3f}"
-    result_image = draw_text(result_image, text, "top-right")
+    flipped_image_with_bbox = draw_text(flipped_image_with_bbox, text, "top-right")
     myPrint(f"fps {fps}")
-    result_image = draw_text(result_image, fps, "top-left")
+    flipped_image_with_bbox = draw_text(flipped_image_with_bbox, fps, "top-left")
 
-    myPrint(f"Visualize2d input_image.shape {result_image.shape}")
-    cv2.imshow(camera_window_name, result_image)
-    return result_image
+    myPrint(f"Visualize2d input_image.shape {flipped_image_with_bbox.shape}")
+    cv2.imshow(camera_window_name, flipped_image_with_bbox)
+    return image_with_bbox, flipped_image_with_bbox
 
 # def save_video(frame_counter):
 #     original_frames_path = os.path.join(output_folder, "original_frames", f"original_frame_{frame_counter}.png")
@@ -600,6 +600,7 @@ def save_img_2d(input_image, frame_counter, input_image_name = None):
         image_path = os.path.join(output_folder,f"output_image_{frame_counter}.png")
     else:
         image_path = os.path.join(output_folder,f"output_image_{input_image_name}_{frame_counter}.png")
+        
     # relative_path_original = os.path.join(output_folder,f"ORIGINAL_image_landmarks2d_{date_time}.png")
     # myPrint(f"saving {date_time}")
     cv2.imwrite(image_path, image)
@@ -617,9 +618,19 @@ def save_feed(input_original_image, input_processed_image, frame_counter):
         
     original_image_path = os.path.join(output_folder,f"frame_{frame_counter}_original.png")
     processed_image_path = os.path.join(output_folder,f"frame_{frame_counter}_processed.png")
+    
+    # Attention:
+    # if i save the original image flipped, it will be better when 
+    # reviewing the results, but when i use the saved originals 
+    # to run the folder mode, they will be inherently different 
+    # from the true original upon which the webcame mode did the face detection.
+    # therefore, it's better to save the original "as seen by the camera" 
+    # which is what the deca+solvepnp will get, so that both processed are really the same
+    # and thus comparable
 
-    original_image_flipped = cv2.flip(original_image, 1)
-    cv2.imwrite(original_image_path, original_image_flipped)
+    # original_image_flipped = cv2.flip(original_image, 1)
+    # cv2.imwrite(original_image_path, original_image_flipped)
+    cv2.imwrite(original_image_path, original_image)
     cv2.imwrite(processed_image_path, processed_image)
 
 def compose_transform_matrix(input_rotation_vector, input_translation_vector):
@@ -1083,8 +1094,8 @@ def detectFace(input_image):
         image = np.array(image)
 
     # bbox, bbox_type = mediaPipeFaceMeshDetectionOriginal(image)
-    # bbox, bbox_type = mediaPipeFaceMeshDetection(image)
-    bbox, bbox_type = mediaPipeFaceDetection(image)
+    bbox, bbox_type = mediaPipeFaceMeshDetection(image)
+    # bbox, bbox_type = mediaPipeFaceDetection(image)
     if bbox is None:
         myPrint('no face detected! return null')
         return None
@@ -1127,7 +1138,7 @@ def getPercentage(part,whole):
         return 0
 def mediaPipeFaceMeshDetectionOriginal(image):
     # mp_face_mesh = mp.solutions.face_mesh
-    model = mp_face_mesh.FaceMesh()
+    # model = mp_face_mesh.FaceMesh()
     out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     # out = self.model.get_landmarks(image)
     if out.multi_face_landmarks is None:
@@ -1154,8 +1165,8 @@ def mediaPipeFaceMeshDetection(image):
     # model = mp_face_mesh.FaceMesh(
     #     max_num_faces=1,
     #     refine_landmarks=True,
-    #     min_detection_confidence=0.7,
-    #     min_tracking_confidence=0.7
+    #     min_detection_confidence=0.5,
+    #     min_tracking_confidence=0.5
     #     )
     h,w = image.shape[:2]
     # out = model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -1208,7 +1219,7 @@ def load_config():
     global save_solvepnp_data
     global save_video_feed
     global save_ear_points, csv_writer, ear_csv
-    global time_logs, logs_txt
+    global time_logs, logs_txt,images_txt
     
         
     with open(global_args.config, "r") as stream:
@@ -1222,10 +1233,13 @@ def load_config():
     output_folder = os.path.join(script_dir, output["folder"])
     # Check if the directory exists, if not, create it
     os.makedirs(output_folder, exist_ok=True)
+    
+    # TODO: add config to control this
     # save_logs = output["save_logs"]
     save_logs = True
     if save_logs:
         logs_txt = open(output_folder+f"/logs.txt", 'a')
+        images_txt = open(output_folder+f"/images.txt", 'a')
         print(f"saving logs to {logs_txt}")
         print("writing")
         logs_txt.write(f"\n -----LOGS----- \n")
@@ -1288,7 +1302,9 @@ def load_config():
 
 
 def myPrint(txt):
+    #TODO make write optional wrt to config
     logs_txt.write(f"\n{txt}")
+    logs_txt.flush()
     print(f"{txt}")
 
 if __name__ == "__main__":
