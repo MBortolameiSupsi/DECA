@@ -30,4 +30,5 @@ mediapipe
 
 # download the pretrained model https://drive.google.com/file/d/1rp8kdyLPvErw2dTmqtjISRVvQLj6Yzje/view?pli=1
 # il modello va messo nella cartella lucid camera feed / data
+# dal sito flame scaricare flame2020 e rinominare il modello in generic_model.pkl
 # installare arena api entrando nella cartella /DECA/arena_api.xxx e runnando il comando presente nel readme
