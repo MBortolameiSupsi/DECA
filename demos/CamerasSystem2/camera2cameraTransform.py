@@ -195,7 +195,7 @@ def get_composed_matrix_from_1_to_2(rvecsCamera1, tvecsCamera1, rvecsCamera2, tv
     t_composed = np.dot(R_camera2, t_camera1_inv) + t_camera2
     return R_composed, t_composed
 
-def getExtrinsics(image, intrinsics, camera_number, image_number):
+def getExtrinsics(image, intrinsics, camera_number:int=0, image_number:int=0):
     # rows = 6
     # columns = 9    
     rows = 11
