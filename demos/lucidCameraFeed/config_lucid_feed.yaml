@@ -8,7 +8,9 @@ source:
     # folder: "./examples_webcam_640_2"
 
 camera:
-    calibration_data: "./calibration_data_lucid_finalOptic_fullres.npz"
+    # calibration_data: "./calibration_data_lucid_finalOptic_fullres.npz"
+    calibration_data: "./calibration_data_lucid_finalOptic_640.npz"
+
     # calibration_data: "./calibration_data_webcam_side_640_2.npz"
     capture_resolution_width: 640
     # capture_resolution_height: 360
@@ -31,4 +33,4 @@ output:
     save_mesh_expression_with_landmarks3d: True
     save_image_with_landmarks2d: True
     time_logs: True
-    save_video_feed: False
+    save_video_feed: True

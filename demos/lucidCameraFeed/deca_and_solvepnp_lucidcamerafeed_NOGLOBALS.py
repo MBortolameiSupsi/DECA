@@ -162,6 +162,8 @@ def main(args):
                 break
         elif source["type"] == "lucid-camera":
             lucid_frame,lucid_frame_item = get_lucid_frame(num_channels)
+            # we acquire images from lucid at full resolution
+            # we then resize the frame to match the calibration at 640
             input_image = cv2.resize(lucid_frame, (camera_width, camera_height))
         elif source["type"] == "folder":
             if images_from_folder.__len__() > 0:
@@ -262,7 +264,8 @@ def main(args):
                     test_mesh, 
                     deca_vertices = vertices,
                     deca_rotation = rotation_vector, 
-                    deca_translation = translation_vector)
+                    deca_translation = translation_vector,
+                    frame_counter = frame_counter)
             myPrint(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
@@ -521,8 +524,10 @@ def projectEarPointsTo2D(translated_rotated_mirrored_head_mesh, camera_matrix, c
     return ear_points_2d
     
 def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaReferenceSystem = False):
-    right_ear_index = 1760
-    left_ear_index = 502
+    # right_ear_index = 1760
+    # left_ear_index = 502
+    right_ear_index = 3564
+    left_ear_index = 3560
     
     if(decaReferenceSystem):
         if SAFE_COPY:
@@ -672,13 +677,13 @@ def save_solvepnp_transform(transform_matrix):
         file.write(f"\n -------- \n")
         np.savetxt(file, transform_matrix)
 
-def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_translation):
+def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_translation, frame_counter):
     new_ear_points = getEarPoints3D(None, deca_vertices, decaReferenceSystem = True)
     ear_points_rotated = applyRotation(new_ear_points, deca_rotation, mirror=False)
     ear_points_translated = applyTranslation(ear_points_rotated,deca_translation, mirror=False)
     timestamp = time.time()
     for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar"]):
-        row = [timestamp, *ear_point, label]
+        row = [timestamp, *ear_point, label, frame_counter]
         csv_writer.writerow(row)
         # Flush the contents to the file to ensure it's written immediately
         ear_csv.flush()
@@ -1286,7 +1291,7 @@ def load_config():
         ear_csv = open(csv_path, mode='w', newline='')
         csv_writer = csv.writer(ear_csv)
         # header
-        header = ["timestamp", "x", "y", "z", "label"]
+        header = ["timestamp", "x", "y", "z", "label", "frame_number"]
         csv_writer.writerow(header)
         ear_csv.flush()
     time_logs = output["time_logs"]
@@ -1313,7 +1318,7 @@ if __name__ == "__main__":
     # Additional Arguments not in original lib
     parser.add_argument(
         "--config",
-        default=os.path.join(script_dir,"./config.yaml"),
+        default=os.path.join(script_dir,"./config_folder.yaml"),
         type=str,
         help="path to the config file",
     )

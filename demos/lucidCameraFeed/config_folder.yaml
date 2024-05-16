@@ -8,11 +8,11 @@ source:
     # folder: "./examples_webcam_640_2"
 
 camera:
-    # calibration_data: "./calibration_data_lucid_finalOptic_640.npz"
-    calibration_data: "./calibration_data_webcam_side_640_2.npz"
+    calibration_data: "./calibration_data_lucid_finalOptic_640.npz"
+    # calibration_data: "./calibration_data_webcam_side_640_2.npz"
     capture_resolution_width: 640
-    capture_resolution_height: 360
-    # capture_resolution_height: 480
+    # capture_resolution_height: 360
+    capture_resolution_height: 480
 
 visualize:
     # Note: do not disable. I need a refactor to make app work without visualizing
@@ -23,7 +23,7 @@ visualize:
 
 output:
     folder: "./results"    
-    save_ear_points: False
+    save_ear_points: True
     save_solvepnp_data: True
     # the following works only in when source type is folder
     # otherwise it would save a mesh+img for each frame from the webcam

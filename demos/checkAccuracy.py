@@ -57,9 +57,9 @@ def get_marker_position_in_lucid(marker_image_coordinates_hom, rvec, tvec):
     marker_in_lucid_system = transform_chessboard_to_lucid @ marker_image_coordinates_hom
     marker_in_lucid_system_hom = marker_in_lucid_system / marker_in_lucid_system[3]
     marker_in_lucid_system_hom /= 1000
-    print(f"----------")
+    # print(f"----------")
     print(f"marker_in_lucid_system_hom is {marker_in_lucid_system_hom}")
-    print(f"----------")
+    # print(f"----------")
     return marker_in_lucid_system_hom
 
 def get_marker_position_in_mocap(marker_hom):    
@@ -70,9 +70,9 @@ def get_marker_position_in_mocap(marker_hom):
     marker_in_mocap_system = transform_into_mocap_system @ marker_hom
     marker_in_mocap_system_hom = marker_in_mocap_system / marker_in_mocap_system[3]
     
-    print(f"----------")
+    # print(f"----------")
     print(f"marker_in_mocap_system is {marker_in_mocap_system_hom}")
-    print(f"----------")
+    # print(f"----------")
     return marker_in_mocap_system_hom
     
     
