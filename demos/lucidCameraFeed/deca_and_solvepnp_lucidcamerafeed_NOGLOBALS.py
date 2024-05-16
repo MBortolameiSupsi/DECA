@@ -676,8 +676,9 @@ def save_landmarks(results, frame_counter):
     
 def checkReprojectionDECA(image, landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name):
     points2d,_ = cv2.projectPoints(landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs)
+    points2d = points2d.squeeze()
     image_with_points = draw_points(image, points2d)
-    save_img_2d(image_with_points, frame_counter, input_image_name)
+    save_img_2d(image_with_points, frame_counter, "reprojectedImage")
 
 
 def save_solvepnp_transform(transform_matrix):
