@@ -231,11 +231,13 @@ def getExtrinsics(image, intrinsics, camera_number:int=0, image_number:int=0):
     )
     # breakpoint()
     print(f"TVECS {tvecs}")
-    axis = np.float32([[300,0,0], [0,300,0], [0,0,-300]]).reshape(-1,3)
+    axis = np.float32([[300,0,0], [0,300,0], [0,0,300]]).reshape(-1,3)
     imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, intrinsics["camera_matrix"], intrinsics["dist_coeffs"])
     new_image = draw(image, corners2, imgpts)
     print(f"new image {new_image.shape}")
     cv2.imshow("new image",new_image)
+    saveImage(new_image, f"image_{image_number}_with_axis_and_reprojection{camera_number}")
+    
     # cv2.waitKey(0)
     return ret, rvecs, tvecs, objp, corners2 
 
@@ -251,6 +253,7 @@ def saveImage(image, name):
     relative_path = os.path.join(
         script_dir, f"{name}.png"
     )
+    print(f"saving image in {relative_path}")
     cv2.imwrite(relative_path, image)
     cv2.waitKey(500)
 
@@ -259,9 +262,9 @@ def draw(img, corners, imgpts):
     corner = (int(corners[0][0]), int(corners[0][1]))
     # tuple(corners[0].ravel())
     imgpts = imgpts.squeeze()
-    img = cv2.line(img, corner, (int(imgpts[0][0]), int(imgpts[0][1])), (255,0,0), 5)
+    img = cv2.line(img, corner, (int(imgpts[0][0]), int(imgpts[0][1])), (0,0,255), 5)
     img = cv2.line(img, corner,(int(imgpts[1][0]), int(imgpts[1][1])), (0,255,0), 5)
-    img = cv2.line(img, corner, (int(imgpts[2][0]), int(imgpts[2][1])), (0,0,255), 5)
+    img = cv2.line(img, corner, (int(imgpts[2][0]), int(imgpts[2][1])), (255,0,0), 5)
     return img
 def load_config():
     global common_images, intrinsicsCamera1, intrinsicsCamera2
