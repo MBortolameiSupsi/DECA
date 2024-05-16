@@ -1229,6 +1229,7 @@ def load_config():
     global visualizer2d_height, visualizer2d_width
     global save_mesh_expression_with_landmarks3d
     global save_image_with_landmarks2d
+    global save_reprojection3dLandmarksOntoImage
     global save_solvepnp_data
     global save_video_feed
     global save_ear_points, csv_writer, ear_csv
