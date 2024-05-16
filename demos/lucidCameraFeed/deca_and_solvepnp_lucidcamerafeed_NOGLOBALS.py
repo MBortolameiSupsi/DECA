@@ -61,6 +61,7 @@ visualizer2d_height = None
 save_solvepnp_data = None
 save_mesh_expression_with_landmarks3d = None
 save_image_with_landmarks2d = None
+save_reprojection3dLandmarksOntoImage = None
 save_ear_points = None
 ear_csv = None
 csv_writer = None
@@ -252,6 +253,8 @@ def main(args):
             end_visualize_time = time.time()
             visualize_time = end_visualize_time - start_visualize_time
 
+            if save_reprojection3dLandmarksOntoImage:
+                checkReprojectionDECA(input_image, vertices, rotation_vector, translation_vector, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name)
             if save_video_feed:
                 save_feed(input_image, image_with_landmarks_and_bbox_not_flipped, frame_counter)
             if save_mesh_expression_with_landmarks3d and source["type"] == "folder":
@@ -671,7 +674,12 @@ def save_landmarks(results, frame_counter):
         file.write(f"\n -----{frame_counter}----- \n")
         np.savetxt(file, rotation_vector, fmt='%.4f')
     
-     
+def checkReprojectionDECA(image, landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name):
+    points2d,_ = cv2.projectPoints(landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs)
+    image_with_points = draw_points(image, points2d)
+    save_img_2d(image_with_points, frame_counter, input_image_name)
+
+
 def save_solvepnp_transform(transform_matrix):
     with open(output_folder+f"/solvepnp_transform.txt", 'a') as file:
         file.write(f"\n -------- \n")
@@ -1296,6 +1304,8 @@ def load_config():
         ear_csv.flush()
     time_logs = output["time_logs"]
     
+    save_reprojection3dLandmarksOntoImage = output["save_reprojection3dLandmarksOntoImage"] 
+
     head_mesh_path = os.path.join(script_dir, config["head_mesh"])
 
     visualize = config["visualize"]

@@ -32,3 +32,4 @@ output:
     save_image_with_landmarks2d: True
     time_logs: True
     save_video_feed: True
+    save_reprojection3dLandmarksOntoImage: False
