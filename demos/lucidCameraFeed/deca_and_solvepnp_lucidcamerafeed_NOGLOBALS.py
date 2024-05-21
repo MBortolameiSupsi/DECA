@@ -203,7 +203,7 @@ def main(args):
         results = deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_dist_coeffs)
         success = results['success']
         if success:
-            # landmarks3D = results['landmarks3D']
+            landmarks3D = results['landmarks3D']
             landmarks2Dfullres = results['landmarks2Dfullres']
             vertices = results['vertices']
             bbox = results['bbox']
@@ -254,11 +254,11 @@ def main(args):
             visualize_time = end_visualize_time - start_visualize_time
 
             if save_reprojection3dLandmarksOntoImage:
-                checkReprojectionDECA(input_image, vertices, rotation_vector, translation_vector, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name)
+                checkReprojectionDECA(input_image, vertices, landmarks3D, landmarks2Dfullres, bbox, rotation_vector, translation_vector, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name)
             if save_video_feed:
                 save_feed(input_image, image_with_landmarks_and_bbox_not_flipped, frame_counter)
             if save_mesh_expression_with_landmarks3d and source["type"] == "folder":
-                save_mesh_3d(head_mesh_rotated_translated_mirrored)
+                save_mesh_3d(head_mesh_rotated_translated_mirrored, frame_counter)
             if save_image_with_landmarks2d and source["type"] == "folder":
                 save_img_2d(image_with_landmarks_and_bbox_not_flipped, frame_counter, input_image_name)
             if save_ear_points:
@@ -582,13 +582,12 @@ def draw_text(input_image, text, position="top-right"):
                     font_color, 
                     line_type)
     return image
-def save_mesh_3d(head_mesh):
+def save_mesh_3d(head_mesh, frame_counter):
     now = datetime.now()
-    date_time = now.strftime("%Y%m%d_%H%M%S")
     relative_path = os.path.join(
         # script_dir,
         output_folder,
-        f"mesh_expression_{date_time}.ply",
+        f"mesh_expression_{frame_counter}.ply",
     )
     # head_mesh.vertices = o3d.utility.Vector3dVector(vertices)
     o3d.io.write_triangle_mesh(
@@ -652,33 +651,61 @@ def compose_transform_matrix(input_rotation_vector, input_translation_vector):
     transform_matrix[:3, :3] = cv2.Rodrigues(rotation_vector)[0].T
     transform_matrix[:3, 3] = translation_vector.T
     return transform_matrix
-def save_landmarks(results, frame_counter):
+def save_landmarks(results, frame_counter, cumulative=True):
     landmarks2Dfullres = results['landmarks2Dfullres']
     vertices = results['vertices']
     bbox = results['bbox']
     translation_vector = results['translation_vector']
     rotation_vector = results['rotation_vector']
-    with open(output_folder+f"/landmarks2Dfullres.txt", 'a') as file:
-        file.write(f"\n -----{frame_counter}----- \n")
-        np.savetxt(file, landmarks2Dfullres, fmt='%.4f')
-    with open(output_folder+f"/vertices.txt", 'a') as file:
-        file.write(f"\n -----{frame_counter}----- \n")
-        np.savetxt(file, vertices, fmt='%.4f')
-    with open(output_folder+f"/bbox.txt", 'a') as file:
-        file.write(f"\n -----{frame_counter}----- \n")
-        np.savetxt(file, bbox, fmt='%.4f')
-    with open(output_folder+f"/translation_vector.txt", 'a') as file:
-        file.write(f"\n -----{frame_counter}----- \n")
-        np.savetxt(file, translation_vector, fmt='%.4f')
-    with open(output_folder+f"/rotation_vector.txt", 'a') as file:
-        file.write(f"\n -----{frame_counter}----- \n")
-        np.savetxt(file, rotation_vector, fmt='%.4f')
-    
-def checkReprojectionDECA(image, landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name):
-    points2d,_ = cv2.projectPoints(landmarks3D, rvec, tvec, camera_matrix, camera_dist_coeffs)
+    if cumulative:
+        with open(output_folder+f"/landmarks2Dfullres.txt", 'a') as file:
+            file.write(f"\n -----{frame_counter}----- \n")
+            np.savetxt(file, landmarks2Dfullres, fmt='%.4f')
+        with open(output_folder+f"/vertices.txt", 'a') as file:
+            file.write(f"\n -----{frame_counter}----- \n")
+            np.savetxt(file, vertices, fmt='%.4f')
+        with open(output_folder+f"/bbox.txt", 'a') as file:
+            file.write(f"\n -----{frame_counter}----- \n")
+            np.savetxt(file, bbox, fmt='%.4f')
+        with open(output_folder+f"/translation_vector.txt", 'a') as file:
+            file.write(f"\n -----{frame_counter}----- \n")
+            np.savetxt(file, translation_vector, fmt='%.4f')
+        with open(output_folder+f"/rotation_vector.txt", 'a') as file:
+            file.write(f"\n -----{frame_counter}----- \n")
+            np.savetxt(file, rotation_vector, fmt='%.4f')
+    else:
+        with open(output_folder+f"/landmarks2Dfullres_{frame_counter}.txt", 'w') as file:
+            np.savetxt(file, landmarks2Dfullres, fmt='%.4f')
+        with open(output_folder+f"/vertices_{frame_counter}.txt", 'a') as file:
+            np.savetxt(file, vertices, fmt='%.4f')
+        with open(output_folder+f"/bbox_{frame_counter}.txt", 'a') as file:
+            np.savetxt(file, bbox, fmt='%.4f')
+        with open(output_folder+f"/translation_vector_{frame_counter}.txt", 'a') as file:
+            np.savetxt(file, translation_vector, fmt='%.4f')
+        with open(output_folder+f"/rotation_vector_{frame_counter}.txt", 'a') as file:
+            np.savetxt(file, rotation_vector, fmt='%.4f')
+
+def checkReprojectionDECA(image, vertices, landmarks3D, landmarks2Dfullres, bbox, rvec, tvec, camera_matrix, camera_dist_coeffs, frame_counter,input_image_name):
+    points2d,_ = cv2.projectPoints(vertices, rvec, tvec, camera_matrix, camera_dist_coeffs)
     points2d = points2d.squeeze()
     image_with_points = draw_points(image, points2d)
     save_img_2d(image_with_points, frame_counter, "reprojectedImage")
+    results = {
+    'landmarks2Dfullres': landmarks2Dfullres,
+    'vertices': vertices,
+    'bbox': bbox,
+    'translation_vector': tvec,
+    'rotation_vector': rvec
+    }
+    save_landmarks(results, frame_counter, False)
+    mesh_expression = o3d.geometry.TriangleMesh()
+    mesh_expression.vertices = o3d.utility.Vector3dVector(vertices)
+    save_mesh_3d(mesh_expression, frame_counter)
+    
+    mesh_landmarks3d = o3d.geometry.TriangleMesh()
+    mesh_landmarks3d.vertices = o3d.utility.Vector3dVector(landmarks3D)
+    save_mesh_3d(mesh_landmarks3d, f"landmarks3d_{frame_counter}")
+
 
 
 def save_solvepnp_transform(transform_matrix):
