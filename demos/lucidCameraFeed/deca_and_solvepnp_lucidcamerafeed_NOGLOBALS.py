@@ -531,7 +531,8 @@ def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaRef
     left_ear_index = 502
     # right_ear_index = 3564
     # left_ear_index = 3560
-    nose_index = 3526
+    nose_tip_index = 3526
+    nose_base_index = 3553
     
     if(decaReferenceSystem):
         if SAFE_COPY:
@@ -546,7 +547,7 @@ def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaRef
         #head_mesh at this point has been rotated and mirrored
         # for 3d visualization
         head_mesh_vertices = np.asarray(translated_rotated_mirrored_head_mesh.vertices)
-    ear_points_3d = np.array([head_mesh_vertices[left_ear_index],head_mesh_vertices[right_ear_index], head_mesh_vertices[nose_index]])
+    ear_points_3d = np.array([head_mesh_vertices[left_ear_index],head_mesh_vertices[right_ear_index], head_mesh_vertices[nose_tip_index], head_mesh_vertices[nose_base_index]])
     return ear_points_3d
        
 def draw_text(input_image, text, position="top-right"):
@@ -719,7 +720,7 @@ def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_t
     ear_points_rotated = applyRotation(new_ear_points, deca_rotation, mirror=False)
     ear_points_translated = applyTranslation(ear_points_rotated,deca_translation, mirror=False)
     # timestamp = time.time()
-    for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar", "noseTip"]):
+    for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar", "noseTip", "noseBase"]):
         row = [timestamp, *ear_point, label, frame_counter]
         csv_writer.writerow(row)
         # Flush the contents to the file to ensure it's written immediately
