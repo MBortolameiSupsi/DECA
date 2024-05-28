@@ -12,7 +12,6 @@
 #
 # For comments or questions, please email us at deca@tue.mpg.de
 # For commercial licensing contact, please contact ps-license@tuebingen.mpg.de
-
 import os, sys
 import cv2
 import numpy as np
@@ -268,7 +267,8 @@ def main(args):
                     deca_vertices = vertices,
                     deca_rotation = rotation_vector, 
                     deca_translation = translation_vector,
-                    frame_counter = frame_counter)
+                    frame_counter = frame_counter,
+                    timestamp = start_time)
             myPrint(
                 f"Deca and SolvePNP time > {deca_and_solvepnp_time} [visualize:{visualize_time}] - dist {distance}"
             )
@@ -527,10 +527,11 @@ def projectEarPointsTo2D(translated_rotated_mirrored_head_mesh, camera_matrix, c
     return ear_points_2d
     
 def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaReferenceSystem = False):
-    # right_ear_index = 1760
-    # left_ear_index = 502
-    right_ear_index = 3564
-    left_ear_index = 3560
+    right_ear_index = 1760
+    left_ear_index = 502
+    # right_ear_index = 3564
+    # left_ear_index = 3560
+    nose_index = 3526
     
     if(decaReferenceSystem):
         if SAFE_COPY:
@@ -545,7 +546,7 @@ def getEarPoints3D(translated_rotated_mirrored_head_mesh, deca_vertices, decaRef
         #head_mesh at this point has been rotated and mirrored
         # for 3d visualization
         head_mesh_vertices = np.asarray(translated_rotated_mirrored_head_mesh.vertices)
-    ear_points_3d = np.array([head_mesh_vertices[left_ear_index],head_mesh_vertices[right_ear_index]])
+    ear_points_3d = np.array([head_mesh_vertices[left_ear_index],head_mesh_vertices[right_ear_index], head_mesh_vertices[nose_index]])
     return ear_points_3d
        
 def draw_text(input_image, text, position="top-right"):
@@ -713,12 +714,12 @@ def save_solvepnp_transform(transform_matrix):
         file.write(f"\n -------- \n")
         np.savetxt(file, transform_matrix)
 
-def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_translation, frame_counter):
+def saveEarPoints(ear_trace_mesh, test_mesh, deca_vertices,deca_rotation, deca_translation, frame_counter, timestamp):
     new_ear_points = getEarPoints3D(None, deca_vertices, decaReferenceSystem = True)
     ear_points_rotated = applyRotation(new_ear_points, deca_rotation, mirror=False)
     ear_points_translated = applyTranslation(ear_points_rotated,deca_translation, mirror=False)
-    timestamp = time.time()
-    for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar"]):
+    # timestamp = time.time()
+    for ear_point, label in zip(ear_points_translated, ["leftEar", "rightEar", "noseTip"]):
         row = [timestamp, *ear_point, label, frame_counter]
         csv_writer.writerow(row)
         # Flush the contents to the file to ensure it's written immediately
