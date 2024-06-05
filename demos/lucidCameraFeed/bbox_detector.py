@@ -3,6 +3,7 @@ import mediapipe as mp
 import argparse
 import os
 import numpy as np
+import open3d as o3d
 
 def detect_face_bbox(image, face_mesh):
     # model = mp_face_mesh.FaceMesh()
@@ -23,8 +24,10 @@ def detect_face_bbox(image, face_mesh):
             int(max_coords[0]),  # right
             int(max_coords[1])   # bottom
         ]
+        mediapipe_landmarks = np.asarray([np.array([landmark.x, landmark.y, landmark.z]) for landmark in face_landmarks.landmark])
+        
         # bbox = np.round(bbox).astype(np.int32)
-        return bbox
+        return bbox, mediapipe_landmarks
     return None
 
 def detect_face_bbox_original(image, face_mesh):
@@ -77,7 +80,7 @@ def main(input_path, output_path, use_webcam):
             frame = cv2.imread(os.path.join(input_path, files[frame_count]))
 
         # Detect face and draw bounding box.
-        bbox = detect_face_bbox(frame, face_mesh)
+        bbox, mediapipe_landmarks = detect_face_bbox(frame, face_mesh)
         if bbox:
             # left, top, right, bottom = map(int, bbox)
             left, top, right, bottom = bbox
@@ -95,7 +98,8 @@ def main(input_path, output_path, use_webcam):
                 break
         else:
             cv2.imwrite(os.path.join(output_path, f'frame_{frame_count}_processed.jpg'), frame)
-
+            mediapipe_landmarks_cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(mediapipe_landmarks))
+            o3d.io.write_point_cloud(os.path.join(output_path, f'mediapipe_landmarks_{frame_count}.ply'), mediapipe_landmarks_cloud)
         frame_count += 1
 
     bbox_file.close()
