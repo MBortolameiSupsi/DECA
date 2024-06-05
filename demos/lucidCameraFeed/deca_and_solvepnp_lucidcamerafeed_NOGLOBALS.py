@@ -391,6 +391,7 @@ def deca_and_solvepnp(input_image, desired_eye_distance, camera_matrix,camera_di
 
     success, rotation_vector, translation_vector = cv2.solvePnP(
         landmarks3D,
+        # vertices,
         # landmarks2D,
         landmarks2Dfullres,
         camera_matrix,
