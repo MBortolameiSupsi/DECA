@@ -82,6 +82,7 @@ cv.destroyAllWindows()
 ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 print("Distortion coefficients:", dist, "\nCamera matrix:", mtx)
 print("tvecs:", tvecs)
+print("ret:", ret)
 
 for t in tvecs:
     print(f"distance is {np.linalg.norm(t)}")
@@ -105,8 +106,10 @@ for t in tvecs:
 total_error = 0
 for i in range(len(objpoints)):
     imgpoints2, _ = cv.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
-    error = cv.norm(imgpoints[i], imgpoints2, cv.NORM_L2) / len(imgpoints2)
+    # error = cv.norm(imgpoints[i], imgpoints2, cv.NORM_L2) / len(imgpoints2)
+    error = cv.norm(imgpoints[i], imgpoints2, cv.NORM_L2)
     total_error += error
+print("Total Error no media:", total_error)
 
 print("Total error:", total_error / len(objpoints))
 
